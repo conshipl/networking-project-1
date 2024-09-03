@@ -1,0 +1,7 @@
+this
+is a
+file
+stored
+on the server
+sent to client
+via get command

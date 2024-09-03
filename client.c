@@ -94,7 +94,30 @@ int main(int argc, char * argv[])
         
 		if (strcmp(command, "get") == 0)
         	{
-            		printf("GET COMMAND\n");
+            		fp = fopen(fileName, "w");
+
+			if ((file_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0)
+        		{
+                		perror("simplex-talk: socket");
+                		exit(1);
+        		}
+
+			if (connect(file_socket, (struct sockaddr *)&sin, sizeof(sin)) < 0)
+			{
+				perror("simplex-talk:connect");
+				close(file_socket);
+				exit(1);
+			}
+
+			while((len = recv(file_socket, file_buf, sizeof(file_buf), 0)))
+			{
+				printf("%s", file_buf);
+				fprintf(fp, "%s", file_buf);
+				bzero(file_buf, MAX_LINE);
+			}
+
+			close(file_socket);
+			fclose(fp);
         	}
         	else if (strcmp(command, "put") == 0)
         	{
