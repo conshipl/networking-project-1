@@ -14,7 +14,7 @@ int main()
 	struct sockaddr_in sin;
 	char buf[MAX_LINE];
 	int len;
-	int s, new_s;
+	int s, command_socket, file_socket;
 	
 	/* build address data structure */
 	bzero((char *)&sin, sizeof(sin));
@@ -40,7 +40,7 @@ int main()
 	/* wait for connection, then receive and print text */
 	while(1) 
 	{
-		if ((new_s = accept(s, (struct sockaddr *)&sin, &len)) < 0) 
+		if ((command_socket = accept(s, (struct sockaddr *)&sin, &len)) < 0) 
 		{
 			perror("simplex-talk: accept");
 			exit(1);
@@ -48,15 +48,26 @@ int main()
 		
 		fp = fopen("itmadeit.txt", "w");	
 
-		while((len = recv(new_s, buf, sizeof(buf), 0)))
+		while(1)
 		{
-			printf("%s", buf);
-			fprintf(fp, "%s", buf);
-			bzero(buf, MAX_LINE);
+			if ((file_socket = accept(s, (struct sockaddr *)&sin, &len)) < 0) 
+			{
+				perror("simplex-talk: accept");
+				exit(1);
+			}
+		
+			while((len = recv(file_socket, buf, sizeof(buf), 0)))
+			{
+				printf("%s", buf);
+				fprintf(fp, "%s", buf);
+				bzero(buf, MAX_LINE);
+			}
+			close(file_socket);
+			break;
 		}
 		
 		fclose(fp);
-		close(new_s);
+		close(command_socket);
 		break;
 	}
 }
