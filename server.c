@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -45,36 +46,94 @@ int main()
 		{
 			perror("simplex-talk: accept");
 			exit(1);
-		}
-		
-		fp = fopen("itmadeit.txt", "a");	
+		}	
 
 		while (len = recv(command_socket, command_buf, sizeof(command_buf), 0))
 		{
-			while(1)
+			if (strcmp(command_buf, "EXIT") == 0)
 			{
-				if ((file_socket = accept(s, (struct sockaddr *)&sin, &len)) < 0) 
+				printf("Client has ended session...disconnecting...\n");
+				break;
+			}
+			
+			int counter = 0;
+			char* token = strtok(command_buf, " ");
+			char* command;
+			char* fileName;
+
+			while(token != NULL && counter < 2)
+			{
+				if (counter == 0)
 				{
-					perror("simplex-talk: accept");
-					exit(1);
+					command = token;
 				}
-		
-				while((len = recv(file_socket, file_buf, sizeof(file_buf), 0)))
+				else
 				{
-					printf("%s", file_buf);
-					fprintf(fp, "%s", file_buf);
-					bzero(file_buf, MAX_LINE);
+					fileName = token;
 				}
 
-				close(file_socket);
-				break;
-			}	
+				token = strtok(NULL, " ");
+				counter++;
+			}
+
+			if (strcmp(command, "get") == 0)
+			{
+				fp = fopen(fileName, "r");
+
+				while(1)
+				{
+					if((file_socket = accept(s, (struct sockaddr *)&sin, &len)) < 0)
+					{
+						perror("simplex-talk: accept");
+						exit(1);
+					}
+					
+					while(fgets(file_buf, MAX_LINE, fp))
+					{
+						printf("%s", file_buf);
+						send(file_socket, file_buf, sizeof(file_buf), 0);
+						bzero(file_buf, MAX_LINE);
+					}
+
+					close(file_socket);
+					break;
+				}
+
+				fclose(fp);
+
+			}
+			else if (strcmp(command, "put") == 0)
+			{
+				fp = fopen(fileName, "w");
+					
+				while(1)
+				{
+					if ((file_socket = accept(s, (struct sockaddr*)&sin, &len)) < 0)
+					{
+						perror("simplex-talk: accept");
+						exit(1);
+					}
+					
+					while((len = recv(file_socket, file_buf, sizeof(file_buf), 0)))
+					{
+						printf("%s", file_buf);
+						fprintf(fp, "%s", file_buf);
+						bzero(file_buf, MAX_LINE);
+					}
+
+					close(file_socket);
+					break;
+				}
+				
+				fclose(fp);
+			}
+			else
+			{
+				printf("Unknown command\n");
+			}
 		
 		}
 		
-		fclose(fp);
-		break;
-
+		close(command_socket);
 	}
-	close(command_socket);
 }
