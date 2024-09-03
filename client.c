@@ -64,7 +64,8 @@ int main(int argc, char * argv[])
 	while (fgets(command_buf, sizeof(command_buf), stdin))
 	{
 		command_buf[strcspn(command_buf, "\n")] = 0;
-		
+		send(command_socket, command_buf, sizeof(command_buf), 0);
+
 		if (strcmp(command_buf, "EXIT") == 0)
 		{
 			printf("Exiting client program.");
