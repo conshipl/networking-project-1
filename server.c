@@ -12,7 +12,8 @@ int main()
 {
 	FILE *fp;
 	struct sockaddr_in sin;
-	char buf[MAX_LINE];
+	char command_buf[MAX_LINE];
+	char file_buf[MAX_LINE];
 	int len;
 	int s, command_socket, file_socket;
 	
@@ -46,28 +47,34 @@ int main()
 			exit(1);
 		}
 		
-		fp = fopen("itmadeit.txt", "w");	
+		fp = fopen("itmadeit.txt", "a");	
 
-		while(1)
+		while (len = recv(command_socket, command_buf, sizeof(command_buf), 0))
 		{
-			if ((file_socket = accept(s, (struct sockaddr *)&sin, &len)) < 0) 
+			while(1)
 			{
-				perror("simplex-talk: accept");
-				exit(1);
-			}
+				if ((file_socket = accept(s, (struct sockaddr *)&sin, &len)) < 0) 
+				{
+					perror("simplex-talk: accept");
+					exit(1);
+				}
 		
-			while((len = recv(file_socket, buf, sizeof(buf), 0)))
-			{
-				printf("%s", buf);
-				fprintf(fp, "%s", buf);
-				bzero(buf, MAX_LINE);
-			}
-			close(file_socket);
-			break;
+				while((len = recv(file_socket, file_buf, sizeof(file_buf), 0)))
+				{
+					printf("%s", file_buf);
+					fprintf(fp, "%s", file_buf);
+					bzero(file_buf, MAX_LINE);
+				}
+
+				close(file_socket);
+				break;
+			}	
+		
 		}
 		
 		fclose(fp);
-		close(command_socket);
 		break;
+
 	}
+	close(command_socket);
 }
