@@ -37,17 +37,20 @@ int main()
 		exit(1);
 	}
 	
+	// listen for connections	
 	listen(s, MAX_PENDING);
 
-	/* wait for connection, then receive and print text */
+	// Continuously try to accept new connections
 	while(1) 
 	{
+		// if a client connects
 		if ((command_socket = accept(s, (struct sockaddr *)&sin, &len)) < 0) 
 		{
 			perror("simplex-talk: accept");
 			exit(1);
 		}	
-
+		
+		// receive the command they input
 		while (len = recv(command_socket, command_buf, sizeof(command_buf), 0))
 		{
 			if (strcmp(command_buf, "EXIT") == 0)
@@ -60,7 +63,8 @@ int main()
 			char* token = strtok(command_buf, " ");
 			char* command;
 			char* fileName;
-
+			
+			// split the command into its appropriate variables
 			while(token != NULL && counter < 2)
 			{
 				if (counter == 0)
@@ -75,7 +79,8 @@ int main()
 				token = strtok(NULL, " ");
 				counter++;
 			}
-
+			
+			// determine which command the user input
 			if (strcmp(command, "get") == 0)
 			{
 				fp = fopen(fileName, "r");
@@ -88,6 +93,7 @@ int main()
 						exit(1);
 					}
 					
+					// send the client the file they request back by reading it locally
 					while(fgets(file_buf, MAX_LINE, fp))
 					{
 						printf("%s", file_buf);
@@ -114,6 +120,7 @@ int main()
 						exit(1);
 					}
 					
+					// receive the file the client is sending and write it locally
 					while((len = recv(file_socket, file_buf, sizeof(file_buf), 0)))
 					{
 						printf("%s", file_buf);
