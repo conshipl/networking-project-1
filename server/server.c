@@ -39,7 +39,7 @@ int main() {
 		perror("Server: bind");
 		exit(1);
 	}
-	
+
 	listen(s, MAX_PENDING);
 
 	printf("Server listening on port %d\n", SERVER_PORT);
@@ -58,15 +58,15 @@ int main() {
 		if (child_pid == 0) { // Child process
 			close(s); // Child doesn't need the listener socket
 			handle_client(client_sock);
-            exit(1);
+			exit(1);
 		} else if (child_pid > 0) { // Parent process
 			close(client_sock); // Parent doesn't need the connected client socket
-        } else {
-            perror("Fork failed");
-            close(client_sock);
-            continue;
-        }
-    }
+		} else {
+			perror("Fork failed");
+			close(client_sock);
+			continue;
+		}
+	}
 
 	close(s);
 	return 0;
@@ -88,7 +88,7 @@ void handle_client(int client_sock) {
 		if (bytes_read <= 0) {
 			perror("recv");
 			break;
-        }
+		}
 
 		buffer[bytes_read] = '\0'; // Null-terminate the command string
 
