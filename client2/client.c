@@ -10,20 +10,14 @@
 
 #define BUFFER_SIZE 256
 
-/*
-i can add more comments to explain the code after i get some sleep
-*/
-
-void send_file(FILE *fp, int s, char* file_name);
 void receive_file(FILE *fp, int s);
 
-int main(int argc, char * argv[])
-{
+int main(int argc, char * argv[]) {
 	FILE *fp;
 	int s;
-    struct sockaddr_in sin;
+	struct sockaddr_in sin;
 	struct hostent *hp;
-    char buffer[BUFFER_SIZE];
+	char buffer[BUFFER_SIZE];
 	char *host;
 	char command[5];
 	char file_name[256];
@@ -31,10 +25,9 @@ int main(int argc, char * argv[])
 	struct stat file_stat;
 	uint32_t file_size;
 
-	if (argc != 2) 
-	{
+	if (argc != 2) {
 		fprintf(stderr, "Usage: %s host\n", argv[0]);
-        exit(1);
+		exit(1);
 	}
 
 	host = argv[1];
@@ -42,8 +35,7 @@ int main(int argc, char * argv[])
 	/* translate host name into peer's IP address */
 	hp = gethostbyname(host);
 	
-	if (!hp) 
-	{
+	if (!hp) {
 		fprintf(stderr, "Client: unknown host: %s\n", host);
 		exit(1);
 	}
@@ -55,40 +47,38 @@ int main(int argc, char * argv[])
 	sin.sin_port = htons(SERVER_PORT);
 
 	/* active open */
-	if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0) 
-	{
+	if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("Client: socket");
 		exit(1);
 	}
 
-	if (connect(s, (struct sockaddr *)&sin, sizeof(sin)) < 0)
-	{
+	if (connect(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
 		perror("Client: connect");
 		close(s);
 		exit(1);
 	}
 
 	while (1) {
-        // Get user input from command line
-        printf("Enter command: ");
-        memset(buffer, 0, BUFFER_SIZE);
-        fgets(buffer, BUFFER_SIZE, stdin);
+		// Get user input from command line
+		printf("Enter command: ");
+		memset(buffer, 0, BUFFER_SIZE);
+		fgets(buffer, BUFFER_SIZE, stdin);
 
-        // Remove newline character from input
-        buffer[strcspn(buffer, "\n")] = 0;
+		// Remove newline character from input
+		buffer[strcspn(buffer, "\n")] = 0;
 
 		if (strcmp(buffer, "exit") == 0) {
-            break;
-        }
+			break;
+		}
 
-		 if (sscanf(buffer, "%s %s", command, file_name) != 2) {
-            fprintf(stderr, "Invalid input format. Please enter in the format: <command> <file_name>\n");
-            continue;
-        }
+		if (sscanf(buffer, "%s %s", command, file_name) != 2) {
+			fprintf(stderr, "Invalid input format. Please enter in the format: <command> <file_name>\n");
+			continue;
+		}
 
 		// Send command to the server
-        snprintf(buffer, BUFFER_SIZE, "%s %s", command, file_name);
-        send(s, buffer, strlen(buffer), 0);
+		snprintf(buffer, BUFFER_SIZE, "%s %s", command, file_name);
+		send(s, buffer, strlen(buffer), 0);
         
 		// GET
 		if (strcmp(command, "get") == 0) {
@@ -110,8 +100,6 @@ int main(int argc, char * argv[])
 				perror("File open error");
 				continue;
 			}
-
-			//send_file(fp, s, file_name);
 
 			// Get file size
 			if (stat(file_name, &file_stat) < 0) {
@@ -139,12 +127,12 @@ int main(int argc, char * argv[])
 					close(s);
 				}
 			}
-			printf("File '%s' sent to server\n", file_name);
+			printf("File '%s' sent to server.\n", file_name);
 			fclose(fp);
 
 
 		} else {
-			printf("Unknown command\n");
+			printf("Unknown command.\n");
 		}
 	}
 
@@ -153,45 +141,9 @@ int main(int argc, char * argv[])
 	return 0;
 }
 
-// Function to send file to server (not used at the moment)
-void send_file(FILE *fp, int s, char* file_name) {
-	struct stat file_stat;
-    char buffer[BUFFER_SIZE];
-	int bytes_read;
-	uint32_t file_size;
-
-	// Get file size
-	if (stat(file_name, &file_stat) < 0) {
-		perror("stat");
-		fclose(fp);
-		close(s);
-		return;
-	}
-	file_size = htonl(file_stat.st_size);
-
-	// Send file size
-	if (send(s, &file_size, sizeof(file_size), 0) == -1) {
-		perror("Error sending file size");
-		fclose(fp);
-		close(s);
-		return;
-	}
-
-	// Send file data to server
-	while ((bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, fp)) > 0) {
-		if (send(s, buffer, bytes_read, 0) == -1) {
-			perror("Error sending file");
-			fclose(fp);
-			close(s);
-		}
-	}
-	printf("File '%s' sent to server\n", file_name);
-	fclose(fp);
-}
-
 // Function to receive file from server
 void receive_file(FILE *fp, int s) {
-    char buffer[BUFFER_SIZE];
+	char buffer[BUFFER_SIZE];
 	int bytes_received;
 	uint32_t file_size;
 
@@ -211,6 +163,6 @@ void receive_file(FILE *fp, int s) {
     }
 
 	if (bytes_received < 0) {
-        perror("Error receiving file");
+		perror("Error receiving file");
     }
 }
