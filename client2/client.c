@@ -147,22 +147,22 @@ void receive_file(FILE *fp, int s) {
 	int bytes_received;
 	uint32_t file_size;
 
-    // Receive the file size
-    if (recv(s, &file_size, sizeof(file_size), 0) <= 0) {
-        perror("Error receiving file size");
-        return;
-    }
-    file_size = ntohl(file_size);
+	// Receive the file size
+	if (recv(s, &file_size, sizeof(file_size), 0) <= 0) {
+		perror("Error receiving file size");
+		return;
+	}
+	file_size = ntohl(file_size);
 
-    // Receive file data
-    while (file_size > 0) {
-        bytes_received = recv(s, buffer, BUFFER_SIZE, 0);
-        if (bytes_received <= 0) break;
-        fwrite(buffer, sizeof(char), bytes_received, fp);
-        file_size -= bytes_received;
-    }
+	// Receive file data
+	while (file_size > 0) {
+		bytes_received = recv(s, buffer, BUFFER_SIZE, 0);
+		if (bytes_received <= 0) break;
+		fwrite(buffer, sizeof(char), bytes_received, fp);
+		file_size -= bytes_received;
+	}
 
 	if (bytes_received < 0) {
 		perror("Error receiving file");
-    }
+	}
 }

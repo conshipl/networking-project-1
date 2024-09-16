@@ -151,8 +151,8 @@ void receive_file(FILE *fp, int s) {
 	if (recv(s, &file_size, sizeof(file_size), 0) <= 0) {
 		perror("Error receiving file size");
 		return;
-    }
-    file_size = ntohl(file_size);
+	}
+	file_size = ntohl(file_size);
 
 	// Receive file data
 	while (file_size > 0) {
