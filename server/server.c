@@ -9,21 +9,16 @@
 
 #define SERVER_PORT 5432
 #define BUFFER_SIZE 1024
-#define MAX_PENDING 5
+#define MAX_PENDING 5 // Defines the maximum length for the queue of pending connections
 #define MAX_LINE 256
-
-/*
-i can add more comments to explain the code after i get some sleep
-*/
 
 void handle_client(int client_sock);
 
-int main()
-{
+int main() {
 	struct sockaddr_in sin;
 	struct sockaddr_in client_addr;
 	int len;
-	int s, client_sock;
+	int s, client_sock; // s: server socket, client_sock: client socket
 	socklen_t addr_len = sizeof(client_addr);
 	pid_t child_pid;
 	char buf[MAX_LINE];
@@ -35,14 +30,12 @@ int main()
 	sin.sin_port = htons(SERVER_PORT);
 	
 	/* setup passive open */
-	if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0) 
-	{
+	if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("Server: socket");
 		exit(1);
 	}
 	
-	if ((bind(s, (struct sockaddr *)&sin, sizeof(sin))) < 0) 
-	{
+	if ((bind(s, (struct sockaddr *)&sin, sizeof(sin))) < 0) {
 		perror("Server: bind");
 		exit(1);
 	}
@@ -52,24 +45,22 @@ int main()
 	printf("Server listening on port %d\n", SERVER_PORT);
 	fflush(stdout);
 
-	while(1) 
-	{
+	while(1) {
 		printf("Waiting for connection...\n");
 		fflush(stdout);
 
-		if ((client_sock = accept(s, (struct sockaddr*)&client_addr, &addr_len)) < 0) 
-		{
+		if ((client_sock = accept(s, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
 			perror("Server: accept");
 			continue;
 		}
 
-		child_pid = fork();
+		child_pid = fork(); // Create child process to handle a client, this enables simultaneous connections
 		if (child_pid == 0) { // Child process
-			close(s);
+			close(s); // Child doesn't need the listener socket
 			handle_client(client_sock);
             exit(1);
 		} else if (child_pid > 0) { // Parent process
-            close(client_sock); // Parent doesn't need the connected client socket
+			close(client_sock); // Parent doesn't need the connected client socket
         } else {
             perror("Fork failed");
             close(client_sock);
@@ -84,19 +75,19 @@ int main()
 void handle_client(int client_sock) {
 	FILE *file;
 	char buffer[BUFFER_SIZE];
-    char command[5];
-    char file_name[256];
-    int bytes_read;
+	char command[5];
+	char file_name[256];
+	int bytes_read;
 	struct stat file_stat;
 	uint32_t file_size;
 
 	while (1) {
 		memset(buffer, 0, BUFFER_SIZE);
-		bytes_read = recv(client_sock, buffer, BUFFER_SIZE, 0);
+		bytes_read = recv(client_sock, buffer, BUFFER_SIZE, 0); // Gets bytes read from receiving data from client
 
 		if (bytes_read <= 0) {
-            perror("recv");
-            break;
+			perror("recv");
+			break;
         }
 
 		buffer[bytes_read] = '\0'; // Null-terminate the command string
@@ -106,8 +97,8 @@ void handle_client(int client_sock) {
 		// Parse command
 		sscanf(buffer, "%s %s", command, file_name);
 
-		if (strcmp(command, "put") == 0) {
-			// Client wants to upload a file (PUT)
+		// PUT
+		if (strcmp(command, "put") == 0) { // Client wants to upload a file (PUT)
 			file = fopen(file_name, "wb"); // Open file for writing in binary mode
 			if (file == NULL) {
 				perror("File open failed in put");
@@ -116,7 +107,7 @@ void handle_client(int client_sock) {
 			}
 			printf("File '%s' opened for writing\n", file_name);
 
-			if (recv(client_sock, &file_size, sizeof(file_size), 0) <= 0) {
+			if (recv(client_sock, &file_size, sizeof(file_size), 0) <= 0) { // Receives the file size before the file data
 				perror("Error receiving file size");
 				fclose(file);
 				break;
@@ -128,7 +119,7 @@ void handle_client(int client_sock) {
 			while (file_size > 0) {
 				bytes_read = recv(client_sock, buffer, BUFFER_SIZE, 0);
 				if (bytes_read <= 0) break;
-				fwrite(buffer, sizeof(char), bytes_read, file);
+				fwrite(buffer, sizeof(char), bytes_read, file); // Write file data into a file created on the server
 				file_size -= bytes_read;
 			}
 			fclose(file);
@@ -136,9 +127,9 @@ void handle_client(int client_sock) {
 		
 		} 
 			
-		
-		else if (strcmp(command, "get") == 0) {
-			file = fopen(file_name, "rb");
+		// GET
+		else if (strcmp(command, "get") == 0) { // Client wants to download a file (GET)
+			file = fopen(file_name, "rb"); // Open file for reading in binary mode
 			if (file == NULL) {
 				perror("File open failed in get");
 				close(client_sock);
