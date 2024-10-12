@@ -5,48 +5,41 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <unistd.h> 
+#include <unistd.h>
 #include <sys/stat.h> // Added this header for struct stat
-#include <arpa/inet.h>
-#include <pthread.h>
+#include <pthread.h>   // For thread support
 
 #define SERVER_PORT 5432
 #define BUFFER_SIZE 1024
 #define MAX_PENDING 5 // Defines the maximum length for the queue of pending connections
 #define MAX_LINE 256
-#define MAX_CLIENTS 100 // Maximum number of clients to track
+#define MAX_CLIENTS 10 // Maximum number of clients
 
-struct client_info {
-    struct sockaddr_in address;
-    int socket;
-    pid_t pid; // Process ID of the client handler
-};
+int client_sockets[MAX_CLIENTS]; // Array to hold client sockets
+int client_count = 0;              // Current count of clients
+pthread_mutex_t clients_mutex;     // Mutex for thread-safe access to client_sockets
 
-struct client_info clients[MAX_CLIENTS];
-int client_count = 0;
-pthread_mutex_t client_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-void handle_client(int client_sock, struct sockaddr_in client_addr, pid_t pid);
-void add_client(struct sockaddr_in client_addr, int client_sock, pid_t pid);
-void remove_client(pid_t pid);
-void print_active_clients();
+void *handle_client(void *client_sock_ptr);
+void broadcast_message(const char *message, int sender_sock);
+void receive_file(int client_sock, const char *file_name);
+void send_file(int client_sock, const char *file_name);
 
 int main() {
     struct sockaddr_in sin;
     struct sockaddr_in client_addr;
-    int len;
-    int s, client_sock;
     socklen_t addr_len = sizeof(client_addr);
-    pid_t child_pid;
-	char client_ip[INET_ADDRSTRLEN]; // Buffer to store the client’s IP address
+    int s, client_sock; // s: server socket, client_sock: client socket
 
-    // Build address data structure
+    // Initialize the mutex
+    pthread_mutex_init(&clients_mutex, NULL);
+
+    /* build address data structure */
     bzero((char *)&sin, sizeof(sin));
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = INADDR_ANY;
     sin.sin_port = htons(SERVER_PORT);
 
-    // Setup passive open
+    /* setup passive open */
     if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Server: socket");
         exit(1);
@@ -58,185 +51,170 @@ int main() {
     }
 
     listen(s, MAX_PENDING);
+
     printf("Server listening on port %d\n", SERVER_PORT);
+    fflush(stdout);
 
     while (1) {
+        printf("Waiting for connection...\n");
+        fflush(stdout);
+
         if ((client_sock = accept(s, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
             perror("Server: accept");
             continue;
         }
 
-		// Get the client's IP address and port
-        inet_ntop(AF_INET, &(client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
-        int client_port = ntohs(client_addr.sin_port);
-
-        child_pid = fork(); // Create child process to handle a client
-        if (child_pid == 0) { // Child process
-            close(s); // Child doesn't need the listener socket
-            handle_client(client_sock, client_addr, child_pid);
-            exit(0);
-        } else if (child_pid > 0) { // Parent process
-            pthread_mutex_lock(&client_mutex);
-            add_client(client_addr, client_sock, child_pid);
-            print_active_clients();
-            pthread_mutex_unlock(&client_mutex);
-            close(client_sock); // Parent doesn't need the connected client socket
+        // Add the new client socket to the array
+        pthread_mutex_lock(&clients_mutex);
+        if (client_count < MAX_CLIENTS) {
+            client_sockets[client_count++] = client_sock;
+            printf("Client connected: %d\n", client_sock);
         } else {
-            perror("Fork failed");
+            printf("Max clients connected. Connection refused for: %d\n", client_sock);
             close(client_sock);
+            pthread_mutex_unlock(&clients_mutex);
             continue;
+        }
+        pthread_mutex_unlock(&clients_mutex);
+
+        // Create a thread to handle the client
+        pthread_t client_thread;
+        if (pthread_create(&client_thread, NULL, handle_client, (void *)&client_sock) < 0) {
+            perror("Could not create client thread");
+            return 1;
         }
     }
 
     close(s);
+    pthread_mutex_destroy(&clients_mutex);
     return 0;
 }
 
-void handle_client(int client_sock, struct sockaddr_in client_addr, pid_t pid) {
-    FILE *file;
+void *handle_client(void *client_sock_ptr) {
+    int client_sock = *(int *)client_sock_ptr;
     char buffer[BUFFER_SIZE];
-    char command[5];
-    char file_name[256];
     int bytes_read;
-    struct stat file_stat;
-    uint32_t file_size;
-
-	//pid_t pid = getpid();
-
-	char client_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
-    int client_port = ntohs(client_addr.sin_port);
 
     while (1) {
         memset(buffer, 0, BUFFER_SIZE);
         bytes_read = recv(client_sock, buffer, BUFFER_SIZE, 0);
-
-        if (bytes_read == 0) { // Client disconnected
-            printf("Client %s:%d has disconnected.\n\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-            pthread_mutex_lock(&client_mutex); // Lock thread because of forking
-            remove_client(pid); // Call to remove the client
-            pthread_mutex_unlock(&client_mutex);
-            break; // Exit the loop
+        if (bytes_read <= 0) {
+            //perror("recv");
+            break;
         }
 
         buffer[bytes_read] = '\0'; // Null-terminate the command string
-        printf("Received command: %s\n", buffer);
+        printf("Received command from client %d: %s\n", client_sock, buffer);
 
-        sscanf(buffer, "%s %s", command, file_name);
-
-        if (strcmp(command, "put") == 0) {
-            file = fopen(file_name, "wb");
-            if (file == NULL) {
-                perror("File open failed in put");
-                close(client_sock);
-                break;
-            }
-            printf("File '%s' opened for writing\n", file_name);
-
-            if (recv(client_sock, &file_size, sizeof(file_size), 0) <= 0) {
-                perror("Error receiving file size");
-                fclose(file);
-                break;
-            }
-            file_size = ntohl(file_size);
-            printf("Receiving file of size %u bytes\n", file_size);
-
-            while (file_size > 0) {
-                bytes_read = recv(client_sock, buffer, BUFFER_SIZE, 0);
-                if (bytes_read <= 0) break;
-                fwrite(buffer, sizeof(char), bytes_read, file);
-                file_size -= bytes_read;
-            }
-            fclose(file);
-            printf("File '%s' received from client\n", file_name);
-
-        } else if (strcmp(command, "get") == 0) {
-            file = fopen(file_name, "rb");
-            if (file == NULL) {
-                perror("File open failed in get");
-                close(client_sock);
-                exit(1);
-            }
-
-            if (stat(file_name, &file_stat) < 0) {
-                perror("stat");
-                fclose(file);
-                close(client_sock);
-                return;
-            }
-            file_size = htonl(file_stat.st_size);
-
-            if (send(client_sock, &file_size, sizeof(file_size), 0) == -1) {
-                perror("Error sending file size");
-                fclose(file);
-                close(client_sock);
-                return;
-            }
-
-            while ((bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, file)) > 0) {
-                if (send(client_sock, buffer, bytes_read, 0) == -1) {
-                    perror("send");
-                    fclose(file);
-                    close(client_sock);
-                    return;
-                }
-            }
-            fclose(file);
-            printf("File '%s' sent to client\n", file_name);
-        } else {
-            printf("Unknown command received: %s\n", command);
+        // Broadcast the message to all clients
+        if (strncmp(buffer, "send", 4) == 0) {
+            broadcast_message(buffer, client_sock);
+        } 
+        // Handle PUT command for file upload
+        else if (strncmp(buffer, "put", 3) == 0) {
+            char file_name[MAX_LINE];
+            sscanf(buffer, "put %s", file_name);
+            receive_file(client_sock, file_name);
+        } 
+        // Handle GET command for file download
+        else if (strncmp(buffer, "get", 3) == 0) {
+            char file_name[MAX_LINE];
+            sscanf(buffer, "get %s", file_name);
+            send_file(client_sock, file_name);
+        } 
+        else {
+            // Unknown command
+            printf("Unknown command received: %s\n", buffer);
         }
     }
 
-    close(client_sock);
-    //printf("Client IP: %s, Port: %d has disconnected\n\n", client_ip, client_port);
-}
-
-// Client handling functions
-void add_client(struct sockaddr_in client_addr, int client_sock, pid_t pid) {
-    if (client_count < MAX_CLIENTS) {
-        clients[client_count].address = client_addr;
-        clients[client_count].socket = client_sock;
-        clients[client_count].pid = pid;
-        client_count++;
-
-		// Print active client information
-        char client_ip[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
-        int client_port = ntohs(client_addr.sin_port);
-        printf("Client connected: IP %s, Port %d. Total clients: %d\n", client_ip, client_port, client_count);
-    }
-	else {
-        printf("Max clients reached. Connection refused.\n");
-        close(client_sock); // Close the socket if the max limit is reached
-    }
-}
-
-void remove_client(pid_t pid) {
+    // Remove the client from the client sockets array
+    pthread_mutex_lock(&clients_mutex);
     for (int i = 0; i < client_count; i++) {
-        if (clients[i].pid == pid) {
-            char client_ip[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &(clients[i].address.sin_addr), client_ip, INET_ADDRSTRLEN);
-            int client_port = ntohs(clients[i].address.sin_port);
+        if (client_sockets[i] == client_sock) {
+            client_sockets[i] = client_sockets[--client_count]; // Replace with last client
+            break;
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
 
-            // Shift remaining clients up to fill the gap
-            for (int j = i; j < client_count - 1; j++) {
-                clients[j] = clients[j + 1];
-            }
-            client_count--;
+    close(client_sock);
+    printf("Client disconnected: %d\n", client_sock);
+    
+    return NULL; // Return NULL at the end
+}
 
-            //printf("Client disconnected: IP %s, Port %d. Total clients: %d\n", client_ip, client_port, client_count);
+void broadcast_message(const char *message, int sender_sock) {
+    pthread_mutex_lock(&clients_mutex); // Lock access to the clients array
+    printf("count: %d\n", client_count);
+    for (int i = 0; i < client_count; i++) {
+        //if (client_sockets[i] != sender_sock) { // Don't send to the sender
+            send(client_sockets[i], message, strlen(message), 0);
+        //}
+    }
+    pthread_mutex_unlock(&clients_mutex); // Unlock access to the clients array
+}
+
+void receive_file(int client_sock, const char *file_name) {
+    FILE *file = fopen(file_name, "wb");
+    if (file == NULL) {
+        perror("File open failed in receive_file");
+        return;
+    }
+
+    uint32_t file_size;
+    if (recv(client_sock, &file_size, sizeof(file_size), 0) <= 0) {
+        perror("Error receiving file size");
+        fclose(file);
+        return;
+    }
+    file_size = ntohl(file_size); // Convert to host byte order
+
+    char buffer[BUFFER_SIZE];
+    int bytes_received;
+    while (file_size > 0) {
+        bytes_received = recv(client_sock, buffer, BUFFER_SIZE, 0);
+        if (bytes_received <= 0) {
+            break; // Break on error
+        }
+        fwrite(buffer, sizeof(char), bytes_received, file);
+        file_size -= bytes_received;
+    }
+    fclose(file);
+    printf("File '%s' received from client\n", file_name);
+}
+
+void send_file(int client_sock, const char *file_name) {
+    FILE *file = fopen(file_name, "rb");
+    if (file == NULL) {
+        perror("File open failed in send_file");
+        return;
+    }
+
+    struct stat file_stat;
+    if (stat(file_name, &file_stat) < 0) {
+        perror("stat");
+        fclose(file);
+        return;
+    }
+    uint32_t file_size = htonl(file_stat.st_size); // Convert to network byte order
+
+    // Send file size
+    if (send(client_sock, &file_size, sizeof(file_size), 0) == -1) {
+        perror("Error sending file size");
+        fclose(file);
+        return;
+    }
+
+    char buffer[BUFFER_SIZE];
+    int bytes_read;
+    while ((bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, file)) > 0) {
+        if (send(client_sock, buffer, bytes_read, 0) == -1) {
+            perror("send");
+            fclose(file);
             return;
         }
     }
-}
-
-void print_active_clients() {
-    printf("Active clients (%d):\n", client_count);
-    for (int i = 0; i < client_count; i++) {
-        char client_ip[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &(clients[i].address.sin_addr), client_ip, INET_ADDRSTRLEN);
-        printf("Client %d - IP: %s, PID: %d\n", i + 1, client_ip, clients[i].pid);
-    }
-	printf("\n");
+    fclose(file);
+    printf("File '%s' sent to client\n", file_name);
 }
