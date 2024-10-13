@@ -68,16 +68,17 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    printf("Available Commands: \n%%broadcast <message>\n%%put <file_name>\n%%get <file_name>\n%%exit\n\n");
+
     while (1) {
         // Get user input from command line
-        printf("Enter command (send <message>, put <file_name>, get <file_name>, exit): ");
         memset(buffer, 0, BUFFER_SIZE);
         fgets(buffer, BUFFER_SIZE, stdin);
 
         // Remove newline character from input
         buffer[strcspn(buffer, "\n")] = 0;
 
-        if (strcmp(buffer, "exit") == 0) {
+        if (strcmp(buffer, "%exit") == 0) {
             break;
         }
 
@@ -85,8 +86,8 @@ int main(int argc, char *argv[]) {
         send(s, buffer, strlen(buffer), 0);
 
         // Handle 'put' command
-        if (strncmp(buffer, "put", 3) == 0) {
-            sscanf(buffer, "put %s", file_name);
+        if (strncmp(buffer, "%put", 4) == 0) {
+            sscanf(buffer + 5, "%s", file_name);
             fp = fopen(file_name, "rb");
             if (fp == NULL) {
                 perror("File open error");
@@ -94,12 +95,12 @@ int main(int argc, char *argv[]) {
             }
             send_file(s, fp, file_name);
             fclose(fp);
-            printf("File '%s' sent to server.\n", file_name);
+            printf("File '%s' sent to server\n", file_name);
         }
 
         // Handle 'get' command
-        // else if (strncmp(buffer, "get", 3) == 0) {
-        //     sscanf(buffer, "get %s", file_name);
+        // else if (strncmp(buffer, "%get", 4) == 0) {
+        //     sscanf(buffer + 5, "%s", file_name);
         //     fp = fopen(file_name, "wb");
         //     if (fp == NULL) {
         //         perror("File open error");
@@ -202,7 +203,7 @@ void *receive_messages(void *socket_desc) {
                 break;
             }
             buffer[bytes_received] = '\0'; // Null-terminate the string
-            printf("\nBroadcast message: %s\n", buffer);
+            printf("\nBroadcast Message: %s\n\n", buffer);
         }
 
         // FILE flag
@@ -226,7 +227,7 @@ void *receive_messages(void *socket_desc) {
             // Receive the file from the server
             receive_file(fp, sock);
             fclose(fp);
-            printf("File '%s' received and saved.\n", file_name);
+            printf("File '%s' received and saved\n", file_name);
         }
         
         // Uknown flag

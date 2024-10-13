@@ -107,21 +107,22 @@ void *handle_client(void *client_sock_ptr) {
         printf("Received command from client %d: %s\n", client_sock, buffer);
 
         // Broadcast the message to all clients
-        if (strncmp(buffer, "send", 4) == 0) {
+        if (strncmp(buffer, "%broadcast", 5) == 0) {
             broadcast_message(buffer, client_sock);
         }
 
         // PUT command for file upload
-        else if (strncmp(buffer, "put", 3) == 0) {
+        else if (strncmp(buffer, "%put", 4) == 0) {
             char file_name[MAX_LINE];
-            sscanf(buffer, "put %s", file_name);
+            sscanf(buffer, "%%put %s", file_name);
+            printf("%s", file_name);
             receive_file(client_sock, file_name);
         }
 
         // GET command for file download
-        else if (strncmp(buffer, "get", 3) == 0) {
+        else if (strncmp(buffer, "%get", 4) == 0) {
             char file_name[MAX_LINE];
-            sscanf(buffer, "get %s", file_name);
+            sscanf(buffer, "%%get %s", file_name);
             send_file(client_sock, file_name);
         }
 
@@ -150,7 +151,8 @@ void *handle_client(void *client_sock_ptr) {
 void broadcast_message(const char *message, int sender_sock) {
     pthread_mutex_lock(&clients_mutex); // Lock access to the clients array
     char formatted_message[BUFFER_SIZE];
-    snprintf(formatted_message, sizeof(formatted_message), "MSG:%s", message + 5); // Send MSG flag with message (+5 to remove "send")
+    snprintf(formatted_message, sizeof(formatted_message), "MSG:%s", message + 11); // Send MSG flag with message (+11 to remove "%broadcast")
+    printf("Broadcast message being sent to all active clients: '%s'\n", message + 11);
 
     for (int i = 0; i < client_count; i++) {
         //if (client_sockets[i] != sender_sock) {
@@ -167,6 +169,7 @@ void receive_file(int client_sock, const char *file_name) {
         return;
     }
 
+    // Receive file size
     uint32_t file_size;
     if (recv(client_sock, &file_size, sizeof(file_size), 0) <= 0) {
         perror("Error receiving file size");
@@ -175,6 +178,7 @@ void receive_file(int client_sock, const char *file_name) {
     }
     file_size = ntohl(file_size); // Convert to host byte order
 
+    // Write received file data to the created file
     char buffer[BUFFER_SIZE];
     int bytes_received;
     while (file_size > 0) {
