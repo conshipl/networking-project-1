@@ -1,7 +1,5 @@
 HOSTNAME := $(shell hostname)
 
-all: client server
-
 client: client.o
 	g++ -g client.o -o client
 

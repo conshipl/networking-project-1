@@ -98,18 +98,18 @@ int main(int argc, char *argv[]) {
         }
 
         // Handle 'get' command
-        else if (strncmp(buffer, "get", 3) == 0) {
-            sscanf(buffer, "get %s", file_name);
-            fp = fopen(file_name, "wb");
-            if (fp == NULL) {
-                perror("File open error");
-                continue;
-            }
-            // Receive file from server
-            receive_file(fp, s);
-            printf("File '%s' received from server.\n", file_name);
-            fclose(fp);
-        }
+        // else if (strncmp(buffer, "get", 3) == 0) {
+        //     sscanf(buffer, "get %s", file_name);
+        //     fp = fopen(file_name, "wb");
+        //     if (fp == NULL) {
+        //         perror("File open error");
+        //         continue;
+        //     }
+        //     // Receive file from server
+        //     receive_file(fp, s);
+        //     printf("File '%s' received from server.\n", file_name);
+        //     fclose(fp);
+        // }
     }
 
     // Close the socket
@@ -117,7 +117,7 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-// Function to receive file from server
+// Receive file from server
 void receive_file(FILE *fp, int s) {
     char buffer[BUFFER_SIZE];
     int bytes_received;
@@ -143,7 +143,7 @@ void receive_file(FILE *fp, int s) {
     }
 }
 
-// Function to send file to server
+// Send file to server
 void send_file(int s, FILE *fp, const char *file_name) {
     char buffer[BUFFER_SIZE];
     int bytes_read;
@@ -180,16 +180,59 @@ void *receive_messages(void *socket_desc) {
     int sock = *(int *)socket_desc;
     char buffer[BUFFER_SIZE];
     int bytes_received;
+    char type_flag[5]; // Buffer to hold "MSG" or "FILE" flag
+    char file_name[256]; // Buffer to hold the file name
 
     while (1) {
-        memset(buffer, 0, BUFFER_SIZE);
-        bytes_received = recv(sock, buffer, BUFFER_SIZE, 0);
+        // First receive the message type flag
+        memset(type_flag, 0, sizeof(type_flag)); // Clear the type_flag buffer
+        bytes_received = recv(sock, type_flag, 4, 0); // 4 bytes for "MSG" or "FILE"
         if (bytes_received <= 0) {
-            perror("Error receiving message");
+            perror("Error receiving message type");
             break;
         }
-        buffer[bytes_received] = '\0'; // Null-terminate the string
-        printf("Broadcast message: %s\n", buffer);
+        type_flag[4] = '\0';  // Null-terminate the flag string
+
+        // MSG flag
+        if (strcmp(type_flag, "MSG:") == 0) {
+            memset(buffer, 0, BUFFER_SIZE);
+            bytes_received = recv(sock, buffer, BUFFER_SIZE, 0);
+            if (bytes_received <= 0) {
+                perror("Error receiving message");
+                break;
+            }
+            buffer[bytes_received] = '\0'; // Null-terminate the string
+            printf("\nBroadcast message: %s\n", buffer);
+        }
+
+        // FILE flag
+        else if (strcmp(type_flag, "FILE") == 0) {
+            // Receive the file name from the server
+            memset(file_name, 0, sizeof(file_name));
+            bytes_received = recv(sock, file_name, sizeof(file_name), 0);
+            if (bytes_received <= 0) {
+                perror("Error receiving file name");
+                break;
+            }
+            printf("Receiving file: %s\n", file_name);
+
+            // Open the file with the received name for writing
+            FILE *fp = fopen(file_name, "wb");
+            if (fp == NULL) {
+                perror("File open error in receive_messages");
+                continue;
+            }
+
+            // Receive the file from the server
+            receive_file(fp, sock);
+            fclose(fp);
+            printf("File '%s' received and saved.\n", file_name);
+        }
+        
+        // Uknown flag
+        else {
+            printf("Unknown message type: %s\n", type_flag);  // Error handling
+        }
     }
 
     return NULL;
