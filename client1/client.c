@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-	// Create a separate thread to listen for messages from the server
+    // Create a separate thread to listen for messages from the server
     pthread_t thread_id;
     if (pthread_create(&thread_id, NULL, receive_messages, (void *)&s) != 0) {
         perror("Failed to create thread");
@@ -194,7 +194,7 @@ void *receive_messages(void *socket_desc) {
         }
         type_flag[4] = '\0';  // Null-terminate the flag string
 
-        // MSG flag
+        // MSG: flag
         if (strcmp(type_flag, "MSG:") == 0) {
             memset(buffer, 0, BUFFER_SIZE);
             bytes_received = recv(sock, buffer, BUFFER_SIZE, 0);

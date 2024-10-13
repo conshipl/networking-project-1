@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-	// Create a separate thread to listen for messages from the server
+    // Create a separate thread to listen for messages from the server
     pthread_t thread_id;
     if (pthread_create(&thread_id, NULL, receive_messages, (void *)&s) != 0) {
         perror("Failed to create thread");
@@ -87,7 +87,7 @@ int main(int argc, char *argv[]) {
 
         // Handle 'put' command
         if (strncmp(buffer, "%put", 4) == 0) {
-            sscanf(buffer, "put %s", file_name);
+            sscanf(buffer + 5, "%s", file_name);
             fp = fopen(file_name, "rb");
             if (fp == NULL) {
                 perror("File open error");
@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
 
         // Handle 'get' command
         // else if (strncmp(buffer, "%get", 4) == 0) {
-        //     sscanf(buffer, "get %s", file_name);
+        //     sscanf(buffer + 5, "%s", file_name);
         //     fp = fopen(file_name, "wb");
         //     if (fp == NULL) {
         //         perror("File open error");
@@ -194,7 +194,7 @@ void *receive_messages(void *socket_desc) {
         }
         type_flag[4] = '\0';  // Null-terminate the flag string
 
-        // MSG flag
+        // MSG: flag
         if (strcmp(type_flag, "MSG:") == 0) {
             memset(buffer, 0, BUFFER_SIZE);
             bytes_received = recv(sock, buffer, BUFFER_SIZE, 0);
