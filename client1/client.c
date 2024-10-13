@@ -11,7 +11,11 @@
 #include <pthread.h>
 
 #define SERVER_PORT 5432
+#define UDP_PORT 5433 // Same UDP port as server
 #define BUFFER_SIZE 1024
+
+int tcp_sock, udp_sock;
+struct sockaddr_in udp_sin;
 
 void receive_file(FILE *fp, int s);
 void send_file(int s, FILE *fp, const char *file_name);
@@ -19,7 +23,6 @@ void *receive_messages(void *socket_desc);
 
 int main(int argc, char *argv[]) {
     FILE *fp;
-    int s;
     struct sockaddr_in sin;
     struct hostent *hp;
     char buffer[BUFFER_SIZE];
@@ -42,29 +45,42 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    // Build address data structure
+    // Build server address structure
     bzero((char *)&sin, sizeof(sin));
     sin.sin_family = AF_INET;
     bcopy(hp->h_addr, (char *)&sin.sin_addr, hp->h_length);
     sin.sin_port = htons(SERVER_PORT);
 
-    // Active open
-    if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
+    // Create TCP socket
+    if ((tcp_sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Client: socket");
         exit(1);
     }
 
-    if (connect(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+    // Connect to the server
+    if (connect(tcp_sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
         perror("Client: connect");
-        close(s);
+        close(tcp_sock);
         exit(1);
     }
 
+    // Create UDP socket
+    if ((udp_sock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Client: UDP socket");
+        exit(1);
+    }
+
+    // Set up UDP socket address structure
+    bzero((char *)&udp_sin, sizeof(udp_sin));
+    udp_sin.sin_family = AF_INET;
+    udp_sin.sin_port = htons(UDP_PORT);
+    bcopy(hp->h_addr, (char *)&udp_sin.sin_addr, hp->h_length);
+
     // Create a separate thread to listen for messages from the server
     pthread_t thread_id;
-    if (pthread_create(&thread_id, NULL, receive_messages, (void *)&s) != 0) {
+    if (pthread_create(&thread_id, NULL, receive_messages, (void *)&tcp_sock) != 0) {
         perror("Failed to create thread");
-        close(s);
+        close(tcp_sock);
         exit(1);
     }
 
@@ -83,7 +99,8 @@ int main(int argc, char *argv[]) {
         }
 
         // Send command to the server
-        send(s, buffer, strlen(buffer), 0);
+        //send(tcp_sock, buffer, strlen(buffer), 0);
+        sendto(udp_sock, buffer, strlen(buffer), MSG_CONFIRM, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
 
         // Handle 'put' command
         if (strncmp(buffer, "%put", 4) == 0) {
@@ -93,28 +110,15 @@ int main(int argc, char *argv[]) {
                 perror("File open error");
                 continue;
             }
-            send_file(s, fp, file_name);
+            send_file(tcp_sock, fp, file_name);
             fclose(fp);
             printf("File '%s' sent to server\n", file_name);
         }
-
-        // Handle 'get' command
-        // else if (strncmp(buffer, "%get", 4) == 0) {
-        //     sscanf(buffer + 5, "%s", file_name);
-        //     fp = fopen(file_name, "wb");
-        //     if (fp == NULL) {
-        //         perror("File open error");
-        //         continue;
-        //     }
-        //     // Receive file from server
-        //     receive_file(fp, s);
-        //     printf("File '%s' received from server.\n", file_name);
-        //     fclose(fp);
-        // }
     }
 
-    // Close the socket
-    close(s);
+    // Close the sockets
+    close(tcp_sock);
+    close(udp_sock);
     return 0;
 }
 
