@@ -192,7 +192,7 @@ void *receive_messages(void *socket_desc) {
             perror("Error receiving message type");
             break;
         }
-        type_flag[4] = '\0';  // Null-terminate the flag string
+        type_flag[4] = '\0'; // Null-terminate the flag string
 
         // MSG: flag
         if (strcmp(type_flag, "MSG:") == 0) {
@@ -232,7 +232,7 @@ void *receive_messages(void *socket_desc) {
         
         // Uknown flag
         else {
-            printf("Unknown message type: %s\n", type_flag);  // Error handling
+            printf("Unknown message type: %s\n", type_flag); // Error handling
         }
     }
 

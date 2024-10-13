@@ -8,8 +8,10 @@
 #include <unistd.h>
 #include <sys/stat.h> // Added this header for struct stat
 #include <pthread.h> // For thread support
+#include <arpa/inet.h> // For UDP
 
-#define SERVER_PORT 5432
+#define SERVER_TCP_PORT 5432
+#define SERVER_UDP_PORT 5433 // Different port for UDP commands
 #define BUFFER_SIZE 1024
 #define MAX_PENDING 5 // Defines the maximum length for the queue of pending connections
 #define MAX_LINE 256
@@ -19,96 +21,115 @@ int client_sockets[MAX_CLIENTS]; // Array to hold client sockets
 int client_count = 0; // Current count of clients
 pthread_mutex_t clients_mutex; // Mutex for thread-safe access to client_sockets
 
-void *handle_client(void *client_sock_ptr);
 void broadcast_message(const char *message, int sender_sock);
 void receive_file(int client_sock, const char *file_name);
 void send_file(int client_sock, const char *file_name);
 
+void *handle_commands(void *udp_sock_ptr, void *tcp_sock_ptr);
+
 int main() {
-    struct sockaddr_in sin;
+    struct sockaddr_in tcp_sin, udp_sin;
+    int tcp_sock, udp_sock;
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
-    int s, client_sock; // s: server socket, client_sock: client socket
 
     // Initialize the mutex
     pthread_mutex_init(&clients_mutex, NULL);
 
-    // Build address data structure
-    bzero((char *)&sin, sizeof(sin));
-    sin.sin_family = AF_INET;
-    sin.sin_addr.s_addr = INADDR_ANY;
-    sin.sin_port = htons(SERVER_PORT);
-
-    // Setup passive open
-    if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("Server: socket");
+    // Create TCP socket
+    if ((tcp_sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Server: TCP socket");
         exit(1);
     }
 
-    if ((bind(s, (struct sockaddr *)&sin, sizeof(sin))) < 0) {
-        perror("Server: bind");
+    // Create UDP socket
+    if ((udp_sock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Server: UDP socket");
         exit(1);
     }
 
-    listen(s, MAX_PENDING);
+    // Setup TCP socket
+    bzero((char *)&tcp_sin, sizeof(tcp_sin));
+    tcp_sin.sin_family = AF_INET;
+    tcp_sin.sin_addr.s_addr = INADDR_ANY;
+    tcp_sin.sin_port = htons(SERVER_TCP_PORT);
 
-    printf("Server listening on port %d\n", SERVER_PORT);
-    printf("Waiting for connections...\n");
-    fflush(stdout);
+    if (bind(tcp_sock, (struct sockaddr *)&tcp_sin, sizeof(tcp_sin)) < 0) {
+        perror("Server: bind TCP");
+        exit(1);
+    }
+
+    listen(tcp_sock, MAX_PENDING);
+    printf("Server listening on TCP port %d\n", SERVER_TCP_PORT);
+
+    // Setup UDP socket
+    bzero((char *)&udp_sin, sizeof(udp_sin));
+    udp_sin.sin_family = AF_INET;
+    udp_sin.sin_addr.s_addr = INADDR_ANY;
+    udp_sin.sin_port = htons(SERVER_UDP_PORT);
+
+    if (bind(udp_sock, (struct sockaddr *)&udp_sin, sizeof(udp_sin)) < 0) {
+        perror("Server: bind UDP");
+        exit(1);
+    }
+
+    printf("Server listening on UDP port %d\n", SERVER_UDP_PORT);
+
+    // Handle commands in a separate thread
+    pthread_t command_thread;
+    pthread_create(&command_thread, NULL, handle_commands, (void *)&udp_sock);
 
     while (1) {
         fflush(stdout);
 
-        if ((client_sock = accept(s, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
+        struct sockaddr_in client_addr;
+        socklen_t addr_len = sizeof(client_addr);
+        int client_sock = accept(tcp_sock, (struct sockaddr*)&client_addr, &addr_len);
+        if (client_sock < 0) {
             perror("Server: accept");
             continue;
         }
-
-        // Add the new client socket to the array
-        pthread_mutex_lock(&clients_mutex);
-        if (client_count < MAX_CLIENTS) {
-            client_sockets[client_count++] = client_sock;
-            printf("Client connected: %d\n", client_sock);
-        } else {
-            printf("Max clients connected. Connection refused for: %d\n", client_sock);
-            close(client_sock);
-            pthread_mutex_unlock(&clients_mutex);
-            continue;
-        }
-        pthread_mutex_unlock(&clients_mutex);
-
-        // Create a thread to handle the client
-        pthread_t client_thread;
-        if (pthread_create(&client_thread, NULL, handle_client, (void *)&client_sock) < 0) {
-            perror("Could not create client thread");
-            return 1;
-        }
     }
 
-    close(s);
+    close(tcp_sock);
+    close(udp_sock);
     pthread_mutex_destroy(&clients_mutex);
     return 0;
 }
 
-void *handle_client(void *client_sock_ptr) {
-    int client_sock = *(int *)client_sock_ptr;
+void *handle_commands(void *udp_sock_ptr, void *tcp_sock_ptr) {
+    int udp_sock = *(int *)udp_sock_ptr;
+    int tcp_sock = *(int *)tcp_sock_ptr;
     char buffer[BUFFER_SIZE];
+    struct sockaddr_in client_addr;
     int bytes_read;
+    socklen_t addr_len = sizeof(client_addr);
 
     while (1) {
         memset(buffer, 0, BUFFER_SIZE);
-        bytes_read = recv(client_sock, buffer, BUFFER_SIZE, 0);
+        int bytes_received = recvfrom(udp_sock, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &addr_len);
+
         if (bytes_read <= 0) {
             //perror("recv");
-            break;
+            continue;
         }
 
-        buffer[bytes_read] = '\0'; // Null-terminate the command string
-        printf("Received command from client %d: %s\n", client_sock, buffer);
+        buffer[bytes_received] = '\0';
+        printf("Received UDP command: %s\n", buffer);
+
+        // Add the client socket to the udp_client_sockets array
+        pthread_mutex_lock(&clients_mutex);
+        if (client_count < MAX_CLIENTS) {
+            client_sockets[client_count++] = client_addr.sin_port; // Store port or any identifier as needed
+            printf("UDP Client added: %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+        } else {
+            printf("Max UDP clients reached. Connection refused from: %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+        }
+        pthread_mutex_unlock(&udp_clients_mutex);
 
         // Broadcast the message to all clients
         if (strncmp(buffer, "%broadcast", 5) == 0) {
-            broadcast_message(buffer, client_sock);
+            broadcast_message(buffer, cleint_addr);
         }
 
         // PUT command for file upload
@@ -116,14 +137,14 @@ void *handle_client(void *client_sock_ptr) {
             char file_name[MAX_LINE];
             sscanf(buffer, "%%put %s", file_name);
             printf("%s", file_name);
-            receive_file(client_sock, file_name);
+            receive_file(tcp_sock, file_name);
         }
 
         // GET command for file download
         else if (strncmp(buffer, "%get", 4) == 0) {
             char file_name[MAX_LINE];
             sscanf(buffer, "%%get %s", file_name);
-            send_file(client_sock, file_name);
+            send_file(tcp_sock, file_name);
         }
 
         // Unknown command
@@ -135,17 +156,15 @@ void *handle_client(void *client_sock_ptr) {
     // Remove the client from the client sockets array
     pthread_mutex_lock(&clients_mutex);
     for (int i = 0; i < client_count; i++) {
-        if (client_sockets[i] == client_sock) {
+        if (client_sockets[i] == udp_sock) {
             client_sockets[i] = client_sockets[--client_count]; // Replace with last client
             break;
         }
     }
     pthread_mutex_unlock(&clients_mutex);
 
-    close(client_sock);
-    printf("Client disconnected: %d\n", client_sock);
-    
-    return NULL;
+    close(udp_sock);
+    printf("Client disconnected: %d\n", udp_sock);
 }
 
 void broadcast_message(const char *message, int sender_sock) {
@@ -162,7 +181,7 @@ void broadcast_message(const char *message, int sender_sock) {
     pthread_mutex_unlock(&clients_mutex); // Unlock access to the clients array
 }
 
-void receive_file(int client_sock, const char *file_name) {
+void receive_file(int tcp_sock, const char *file_name) {
     FILE *file = fopen(file_name, "wb");
     if (file == NULL) {
         perror("File open failed in receive_file");
@@ -171,7 +190,7 @@ void receive_file(int client_sock, const char *file_name) {
 
     // Receive file size
     uint32_t file_size;
-    if (recv(client_sock, &file_size, sizeof(file_size), 0) <= 0) {
+    if (recv(tcp_sock, &file_size, sizeof(file_size), 0) <= 0) {
         perror("Error receiving file size");
         fclose(file);
         return;
@@ -182,7 +201,7 @@ void receive_file(int client_sock, const char *file_name) {
     char buffer[BUFFER_SIZE];
     int bytes_received;
     while (file_size > 0) {
-        bytes_received = recv(client_sock, buffer, BUFFER_SIZE, 0);
+        bytes_received = recv(tcp_sock, buffer, BUFFER_SIZE, 0);
         if (bytes_received <= 0) {
             break;
         }
@@ -193,20 +212,20 @@ void receive_file(int client_sock, const char *file_name) {
     printf("File '%s' received from client\n", file_name);
 }
 
-void send_file(int client_sock, const char *file_name) {
+void send_file(int tcp_sock, const char *file_name) {
     char buffer[BUFFER_SIZE];
     int bytes_read;
     struct stat file_stat;
 
     // Send the FILE flag to the client
-    if (send(client_sock, "FILE", 4, 0) == -1) {
+    if (send(tcp_sock, "FILE", 4, 0) == -1) {
         perror("Error sending FILE flag");
         return;
     }
     printf("FILE flag sent to client\n");
 
     // Send the file name to the client
-    if (send(client_sock, file_name, strlen(file_name) + 1, 0) == -1) { // Include the null terminator
+    if (send(tcp_sock, file_name, strlen(file_name) + 1, 0) == -1) { // Include the null terminator
         perror("Error sending file name");
         return;
     }
@@ -227,7 +246,7 @@ void send_file(int client_sock, const char *file_name) {
     uint32_t file_size = htonl(file_stat.st_size); // Convert to network byte order
 
     // Send file size
-    if (send(client_sock, &file_size, sizeof(file_size), 0) == -1) {
+    if (send(tcp_sock, &file_size, sizeof(file_size), 0) == -1) {
         perror("Error sending file size");
         fclose(file);
         return;
@@ -235,7 +254,7 @@ void send_file(int client_sock, const char *file_name) {
 
     // Send file data
     while ((bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, file)) > 0) {
-        if (send(client_sock, buffer, bytes_read, 0) == -1) {
+        if (send(tcp_sock, buffer, bytes_read, 0) == -1) {
             perror("send");
             fclose(file);
             return;
