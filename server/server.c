@@ -37,8 +37,7 @@ int main() {
     socklen_t addr_len = sizeof(client_addr);
     int tcp_sock_client;
 
-    // Initialize the mutex
-    pthread_mutex_init(&clients_mutex, NULL);
+    pthread_mutex_init(&clients_mutex, NULL); // Initialize the mutex
 
     // Build address data structure
     bzero((char *)&sin, sizeof(sin));
@@ -138,7 +137,7 @@ void *handle_client(void *args_ptr) {
         //bytes_read_tcp = recv(tcp_sock_client, buffer, BUFFER_SIZE, 0);
         if (bytes_read_udp > 0) {
             buffer[bytes_read_udp] = '\0'; // Null-terminate the command string
-            printf("Received command from client %d: %s\n", tcp_sock, buffer);
+            printf("Received command from client %d: %s\n", tcp_sock_client, buffer);
 
             // Broadcast the message to all clients
             if (strncmp(buffer, "%broadcast", 10) == 0) {

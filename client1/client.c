@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
             }
             send_file(tcp_sock, fp, file_name);
             fclose(fp);
-            printf("File '%s' sent to server\n", file_name);
+            printf("File '%s' sent to server\n\n", file_name);
         }
     }
 
@@ -196,7 +196,7 @@ void *receive_messages(void *socket_desc) {
             perror("Error receiving message type");
             break;
         }
-        type_flag[4] = '\0';  // Null-terminate the flag string
+        type_flag[4] = '\0'; // Null-terminate the flag string
 
         // MSG: flag
         if (strcmp(type_flag, "MSG:") == 0) {
@@ -231,12 +231,12 @@ void *receive_messages(void *socket_desc) {
             // Receive the file from the server
             receive_file(fp, sock);
             fclose(fp);
-            printf("File '%s' received and saved\n", file_name);
+            printf("File '%s' received and saved\n\n", file_name);
         }
         
         // Uknown flag
         else {
-            printf("Unknown message type: %s\n", type_flag);  // Error handling
+            printf("Unknown message type: %s\n\n", type_flag);
         }
     }
 
