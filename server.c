@@ -1,146 +1,44 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 
-#define SERVER_PORT 5432
-#define MAX_PENDING 5
-#define MAX_LINE 256
+#define UDP_PORT 5432
+#define BUFFER_SIZE 1024
 
-int main()
-{
-	FILE *fp;
-	struct sockaddr_in sin;
-	char command_buf[MAX_LINE];
-	char file_buf[MAX_LINE];
-	int len;
-	int s, command_socket, file_socket;
-	
-	/* build address data structure */
-	bzero((char *)&sin, sizeof(sin));
-	sin.sin_family = AF_INET;
-	sin.sin_addr.s_addr = INADDR_ANY;
-	sin.sin_port = htons(SERVER_PORT);
-	
-	/* setup passive open */
-	if ((s = socket(PF_INET, SOCK_STREAM, 0)) < 0) 
-	{
-		perror("simplex-talk: socket");
-		exit(1);
-	}
-	
-	if ((bind(s, (struct sockaddr *)&sin, sizeof(sin))) < 0) 
-	{
-		perror("simplex-talk: bind");
-		exit(1);
-	}
-	
-	// listen for connections	
-	listen(s, MAX_PENDING);
+int main(int argc, char *argv[]) {
+    FILE *fp;
+    struct sockaddr_in udp_sin;
+    socklen_t addr_len = sizeof(udp_sin);
+    struct hostent *hp;
+    char *host;
+    char buffer[BUFFER_SIZE];
+    int udp_socket;
 
-	// Continuously try to accept new connections
-	while(1) 
-	{
-		// if a client connects
-		if ((command_socket = accept(s, (struct sockaddr *)&sin, &len)) < 0) 
-		{
-			perror("simplex-talk: accept");
-			exit(1);
-		}	
-		
-		// receive the command they input
-		while (len = recv(command_socket, command_buf, sizeof(command_buf), 0))
-		{
-			if (strcmp(command_buf, "EXIT") == 0)
-			{
-				printf("Client has ended session...disconnecting...\n");
-				break;
-			}
-			
-			int counter = 0;
-			char* token = strtok(command_buf, " ");
-			char* command;
-			char* fileName;
-			
-			// split the command into its appropriate variables
-			while(token != NULL && counter < 2)
-			{
-				if (counter == 0)
-				{
-					command = token;
-				}
-				else
-				{
-					fileName = token;
-				}
+    // Create UDP socket
+    if ((udp_socket = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Client: UDP socket");
+        exit(1);
+    }
 
-				token = strtok(NULL, " ");
-				counter++;
-			}
-			
-			// determine which command the user input
-			if (strcmp(command, "get") == 0)
-			{
-				fp = fopen(fileName, "r");
+    // Set up UDP socket address structure
+    bzero((char *)&udp_sin, sizeof(udp_sin));
+    udp_sin.sin_family = AF_INET;
+    udp_sin.sin_addr.s_addr = INADDR_ANY;
+    udp_sin.sin_port = htons(UDP_PORT);
 
-				while(1)
-				{
-					if((file_socket = accept(s, (struct sockaddr *)&sin, &len)) < 0)
-					{
-						perror("simplex-talk: accept");
-						exit(1);
-					}
-					
-					// send the client the file they request back by reading it locally
-					while(fgets(file_buf, MAX_LINE, fp))
-					{
-						printf("%s", file_buf);
-						send(file_socket, file_buf, sizeof(file_buf), 0);
-						bzero(file_buf, MAX_LINE);
-					}
+    // Bind the UDP socket
+    if (bind(udp_socket, (struct sockaddr *)&udp_sin, sizeof(udp_sin)) < 0) {
+        perror("Server: UDP bind");
+	exit(1);
+    }
 
-					close(file_socket);
-					break;
-				}
-
-				fclose(fp);
-
-			}
-			else if (strcmp(command, "put") == 0)
-			{
-				fp = fopen(fileName, "w");
-					
-				while(1)
-				{
-					if ((file_socket = accept(s, (struct sockaddr*)&sin, &len)) < 0)
-					{
-						perror("simplex-talk: accept");
-						exit(1);
-					}
-					
-					// receive the file the client is sending and write it locally
-					while((len = recv(file_socket, file_buf, sizeof(file_buf), 0)))
-					{
-						printf("%s", file_buf);
-						fprintf(fp, "%s", file_buf);
-						bzero(file_buf, MAX_LINE);
-					}
-
-					close(file_socket);
-					break;
-				}
-				
-				fclose(fp);
-			}
-			else
-			{
-				printf("Unknown command\n");
-			}
-		
-		}
-		
-		close(command_socket);
-	}
+    while (1) {
+	bzero(buffer, BUFFER_SIZE);
+	recvfrom(udp_socket, (char *)buffer, BUFFER_SIZE, 0, (struct sockaddr *)&udp_sin, &addr_len);
+	printf("%s\n", buffer);
+    }
 }
