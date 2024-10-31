@@ -1,0 +1,2 @@
+https://www.geeksforgeeks.org/c-program-for-file-transfer-using-udp/
+https://stackoverflow.com/questions/22160807/file-d-name-into-a-variable-in-c
