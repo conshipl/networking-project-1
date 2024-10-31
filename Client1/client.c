@@ -7,6 +7,7 @@
 #include <netdb.h>
 #include <dirent.h> // for accessing local directory
 #include <unistd.h> // gethostname
+#include <pthread.h>
 
 #define UDP_PORT 5432
 #define BUFFER_SIZE 1024
@@ -20,16 +21,36 @@ void registerLocalFiles(char* buffer) {
     struct dirent *dir;
     d = opendir(".");
     
+    strcat(buffer, " ");
+
     if (d) {
 	while ((dir = readdir(d)) != NULL) {
 	    if (strstr(dir->d_name, ".txt")) {
-		strcat(buffer, ",");
 		strcat(buffer, dir->d_name);
+		strcat(buffer, ",");
 	    }
 	}
 
 	closedir(d);
     }
+}
+
+void *receiveDatagrams(void *socket_desc) {
+    int socket = *(int *)socket_desc;
+    char buffer[BUFFER_SIZE];
+    int bytes_received;
+    char type_flag[5]; // Buffer to hold flags
+    char file_name[256]; // Buffer to hold filenames
+
+    while (1) {
+	fflush(stdout);
+	bzero(type_flag, sizeof(type_flag));
+
+	//bytes_received = recvfrom(socket, (char *)buffer, BUFFER_SIZE, 0, 
+	break;
+    }
+
+    return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -69,11 +90,37 @@ int main(int argc, char *argv[]) {
     // Send hostname and available files to server
     bzero(buffer, BUFFER_SIZE);
     gethostname(buffer, sizeof(buffer));
+    strcat(buffer, " %cnct"); // CONNECT
     registerLocalFiles(buffer);
-    printf("%s\n", buffer);
     sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
 
-    while (1) {
-	
+    // Create separate thread to listen for datagrams from the server
+    pthread_t thread_id;
+    if (pthread_create(&thread_id, NULL, receiveDatagrams, (void *)&udp_socket) != 0) {
+	perror("Failed to create thread.");
+	close(udp_socket);
+	exit(1);
     }
+
+    printf("Available Commands: \n\n\t%%files \t\t\t--Retrieve all available files\n\t%%get <file_name> \t--Get the specified file\n\t%%exit \t\t\t--Quit program\n\n");
+
+    // Listen for user input and send commands to server
+    while (1) {
+	bzero(buffer, BUFFER_SIZE);
+	fgets(buffer, BUFFER_SIZE, stdin);
+
+	// Remove newline character from input
+	buffer[strcspn(buffer, "\n")] = 0;
+
+	if (strcmp(buffer, "%exit") == 0) {
+	    break;
+	}
+
+	sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
+    }
+
+    pthread_cancel(thread_id);
+    close(udp_socket);
+
+    return 0;
 }
