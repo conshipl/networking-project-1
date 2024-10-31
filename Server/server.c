@@ -12,15 +12,15 @@
 #define MAX_RESOURCES 100
 
 struct User {
-    char *username;
+    char username[50];
     in_addr ip_address;
-    char *status; 
+    char status[15]; 
 };
 
 struct Resource {
-    char *owner_name;
-    char *resource_name;
-    char *status;
+    char owner_name[50];
+    char resource_name[50];
+    char status[15];
 };
 
 void processDatagram(char* buffer, char* username, char* command, char* arguments) {
@@ -91,18 +91,18 @@ int main(int argc, char *argv[]) {
 	if (strncmp(command, "%cnct", 5) == 0) {
             
 	    if (user_count < MAX_USERS) {
-                user_table[user_count].username = username;
+                strcpy(user_table[user_count].username, username);
 		user_table[user_count].ip_address = udp_sin.sin_addr;
 		char c[] = "connected";
-		user_table[user_count].status = c;
+		strcpy(user_table[user_count].status, c);
 		++user_count;
 
 		if (resource_count < MAX_RESOURCES) {
-                    resource_table[resource_count].owner_name = username;
+                    strcpy(resource_table[resource_count].owner_name, username);
 		    char s[] = "something";
-		    resource_table[resource_count].resource_name = s;
+		    strcpy(resource_table[resource_count].resource_name, s);
 		    char a[] = "active";
-		    resource_table[resource_count].status = a;
+		    strcpy(resource_table[resource_count].status, a);
 		    ++resource_count;
 		}
 	    }
