@@ -97,13 +97,21 @@ int main(int argc, char *argv[]) {
 		strcpy(user_table[user_count].status, c);
 		++user_count;
 
-		if (resource_count < MAX_RESOURCES) {
-                    strcpy(resource_table[resource_count].owner_name, username);
-		    char s[] = "something";
-		    strcpy(resource_table[resource_count].resource_name, s);
-		    char a[] = "active";
-		    strcpy(resource_table[resource_count].status, a);
-		    ++resource_count;
+		if (arguments != NULL) {
+		    char* token = strtok(arguments, ",");
+
+		    while (token != NULL) {
+			
+			if (resource_count < MAX_RESOURCES) {
+                    	    strcpy(resource_table[resource_count].owner_name, username);
+		    	    strcpy(resource_table[resource_count].resource_name, token);
+		    	    char a[] = "active";
+		    	    strcpy(resource_table[resource_count].status, a);
+		    	    ++resource_count;
+			}
+
+			token = strtok(NULL, ",");		
+		    }
 		}
 	    }
 
