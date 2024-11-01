@@ -35,9 +35,15 @@ void registerLocalFiles(char* buffer) {
     }
 }
 
+// Main thread: accepts user input commands and sends them to the server.
+//
+// This function is utilized by a separate thread that listens for incoming datagrams and
+// acts on them accordingly.
 void *receiveDatagrams(void *socket_desc) {
     int socket = *(int *)socket_desc;
     char buffer[BUFFER_SIZE];
+    struct sockaddr_in udp_sin;
+    socklen_t addr_len = sizeof(udp_sin);
     int bytes_received;
     char type_flag[5]; // Buffer to hold flags
     char file_name[256]; // Buffer to hold filenames
@@ -46,8 +52,9 @@ void *receiveDatagrams(void *socket_desc) {
 	fflush(stdout);
 	bzero(type_flag, sizeof(type_flag));
 
-	//bytes_received = recvfrom(socket, (char *)buffer, BUFFER_SIZE, 0, 
-	break;
+	bytes_received = recvfrom(socket, (char *)buffer, BUFFER_SIZE, 0 , (struct sockaddr *)&udp_sin, &addr_len);
+
+	printf("Received buffer contents: %s\n", buffer);
     }
 
     return NULL;
@@ -102,7 +109,7 @@ int main(int argc, char *argv[]) {
 	exit(1);
     }
 
-    printf("Available Commands: \n\n\t%%files \t\t\t--Retrieve all available files\n\t%%get <file_name> \t--Get the specified file\n\t%%exit \t\t\t--Quit program\n\n");
+    printf("Available Commands: \n\n\t%%all files \t\t--Retrieve all available files\n\t%%get <file_name> \t--Get the specified file\n\t%%exit \t\t\t--Quit program\n\n");
 
     // Listen for user input and send commands to server
     while (1) {
@@ -115,10 +122,19 @@ int main(int argc, char *argv[]) {
 	if (strcmp(buffer, "%exit") == 0) {
 	    break;
 	}
+	
+	// Prepend hostname onto command and arguments, i.e. %all files -> LAPTOP-MZ82187 %all files
+	char hostname[BUFFER_SIZE];
+	bzero(hostname, BUFFER_SIZE);
+	gethostname(hostname, sizeof(hostname));
+	strcat(hostname, " ");
+	strcat(hostname, buffer);
 
-	sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
+	// Send command to server
+	sendto(udp_socket, hostname, strlen(hostname), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
     }
 
+    // When user exits, close separate listener thread
     pthread_cancel(thread_id);
     close(udp_socket);
 
