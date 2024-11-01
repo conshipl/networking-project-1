@@ -37,8 +37,7 @@ void registerLocalFiles(char* buffer) {
 
 // Main thread: accepts user input commands and sends them to the server.
 //
-// This function is utilized by a separate thread that listens for incoming datagrams and
-// acts on them accordingly.
+// This function is utilized by a separate thread that listens for incoming datagrams and acts on them accordingly.
 void *receiveDatagrams(void *socket_desc) {
     int socket = *(int *)socket_desc;
     char buffer[BUFFER_SIZE];
@@ -49,12 +48,23 @@ void *receiveDatagrams(void *socket_desc) {
     char file_name[256]; // Buffer to hold filenames
 
     while (1) {
-	fflush(stdout);
-	bzero(type_flag, sizeof(type_flag));
+	    fflush(stdout);
+	    bzero(type_flag, sizeof(type_flag));
 
-	bytes_received = recvfrom(socket, (char *)buffer, BUFFER_SIZE, 0 , (struct sockaddr *)&udp_sin, &addr_len);
+	    bytes_received = recvfrom(socket, (char *)buffer, BUFFER_SIZE, 0 , (struct sockaddr *)&udp_sin, &addr_len);
 
-	printf("Received buffer contents: %s\n", buffer);
+        if (bytes_received > 0) {
+            // Check if the message is a "ping" from the server
+            if (strcmp(buffer, "ping") == 0) {
+                // Send an "ack" response back to the server
+                printf("\nping received\n");
+                strcpy(buffer, "ack");
+                sendto(socket, buffer, strlen(buffer), 0, (struct sockaddr*)&udp_sin, addr_len);
+            } 
+            else {
+	            printf("Received buffer contents: %s\n", buffer);
+            }
+        }
     }
 
     return NULL;
@@ -104,34 +114,34 @@ int main(int argc, char *argv[]) {
     // Create separate thread to listen for datagrams from the server
     pthread_t thread_id;
     if (pthread_create(&thread_id, NULL, receiveDatagrams, (void *)&udp_socket) != 0) {
-	perror("Failed to create thread.");
-	close(udp_socket);
-	exit(1);
+        perror("Failed to create thread.");
+        close(udp_socket);
+        exit(1);
     }
 
     printf("Available Commands: \n\n\t%%all files \t\t--Retrieve all available files\n\t%%get <file_name> \t--Get the specified file\n\t%%exit \t\t\t--Quit program\n\n");
 
     // Listen for user input and send commands to server
     while (1) {
-	bzero(buffer, BUFFER_SIZE);
-	fgets(buffer, BUFFER_SIZE, stdin);
+	    bzero(buffer, BUFFER_SIZE);
+	    fgets(buffer, BUFFER_SIZE, stdin);
 
-	// Remove newline character from input
-	buffer[strcspn(buffer, "\n")] = 0;
+	    // Remove newline character from input
+	    buffer[strcspn(buffer, "\n")] = 0;
 
-	if (strcmp(buffer, "%exit") == 0) {
-	    break;
-	}
+        if (strcmp(buffer, "%exit") == 0) {
+            break;
+        }
 	
-	// Prepend hostname onto command and arguments, i.e. %all files -> LAPTOP-MZ82187 %all files
-	char hostname[BUFFER_SIZE];
-	bzero(hostname, BUFFER_SIZE);
-	gethostname(hostname, sizeof(hostname));
-	strcat(hostname, " ");
-	strcat(hostname, buffer);
+	    // Prepend hostname onto command and arguments, i.e. %all files -> LAPTOP-MZ82187 %all files
+	    char hostname[BUFFER_SIZE];
+	    bzero(hostname, BUFFER_SIZE);
+	    gethostname(hostname, sizeof(hostname));
+	    strcat(hostname, " ");
+	    strcat(hostname, buffer);
 
-	// Send command to server
-	sendto(udp_socket, hostname, strlen(hostname), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
+	    // Send command to server
+	    sendto(udp_socket, hostname, strlen(hostname), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
     }
 
     // When user exits, close separate listener thread
