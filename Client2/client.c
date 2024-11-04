@@ -51,10 +51,24 @@ void *receiveDatagrams(void *socket_desc) {
     while (1) {
 	fflush(stdout);
 	bzero(type_flag, sizeof(type_flag));
+        bzero(buffer, BUFFER_SIZE);
 
 	bytes_received = recvfrom(socket, (char *)buffer, BUFFER_SIZE, 0 , (struct sockaddr *)&udp_sin, &addr_len);
 
-	printf("Received buffer contents: %s\n", buffer);
+	if (bytes_received > 0) {
+            // Check if the message is a "ping" from the server
+            if (strcmp(buffer, "ping") == 0) {
+                // Send an "ack" response back to the server
+                printf("\nping received\n");
+    		bzero(buffer, BUFFER_SIZE);
+    		gethostname(buffer, sizeof(buffer));
+    		strcat(buffer, " %ack ping"); // ACKNOWLEDGE
+    		sendto(socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
+            } 
+            else {
+	        printf("Received buffer contents: %s\n", buffer);
+            }
+        }
     }
 
     return NULL;
