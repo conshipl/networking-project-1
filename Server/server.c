@@ -35,8 +35,14 @@ struct User user_table[MAX_USERS];
 int user_count = 0;
 struct Resource resource_table[MAX_RESOURCES];
 int resource_count = 0;
-pthread_mutex_t user_mutex; // Mutex for thread-safe access to user_table
+pthread_mutex_t user_mutex; // Mutex for thread-safe access to user_table and resource_table
 
+/* 
+ * Split datagram into parts
+ *
+ * Expected format of buffer: <hostname> <command> <argument1>,<argument2>,...
+ * Example: LAPTOP-XJ10456 %cnct text1.txt,text2.txt,
+ */ 
 void processDatagram(char* buffer, char* username, char* command, char* arguments) {
     bzero(username, sizeof(username));
     bzero(command, sizeof(command));
@@ -69,6 +75,7 @@ void displayResourceTable(struct Resource resource_table[MAX_RESOURCES], int res
     }
     fflush(stdout);
 }
+
 void* pingClients(void* arg) {
     int udp_socket = *(int*)arg;
     char buffer[BUFFER_SIZE] = "ping";
@@ -78,18 +85,21 @@ void* pingClients(void* arg) {
     while (1) {
         sleep(PING_INTERVAL); // Wait for the interval
 
-        // Send "ping" to each client and reset status if no response is received
+        // Send "ping" to each client and set client status to disconnected and resource(s') status to inactive 
 	pthread_mutex_lock(&user_mutex);
         for (int i = 0; i < user_count; i++) {
             if (strcmp(user_table[i].status, "connected") == 0) {
                 printf("\nSent ping to %s\n", user_table[i].username);
 
+		// Set user status to disconnected
 		bzero(user_table[i].status, sizeof(user_table[i].status));
 		strcpy(user_table[i].status, "disconnected");
                 
                 // Send "ping" message
                 sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr*)&user_table[i].address, addr_len);
-            	for (int j = 0; j < resource_count; ++j) {
+            	
+		// Set user's resources to inactive
+		for (int j = 0; j < resource_count; ++j) {
 		    if (strcmp(user_table[i].username, resource_table[j].owner_name) == 0) {
      		        bzero(resource_table[j].status, sizeof(resource_table[j].status));
 		        strcpy(resource_table[j].status, "inactive");
@@ -97,6 +107,7 @@ void* pingClients(void* arg) {
 	        }
 	    }
         }
+
 	displayUserTable(user_table, user_count);
 	displayResourceTable(resource_table, resource_count);
 
@@ -212,14 +223,17 @@ int main(int argc, char *argv[]) {
 	    // Send user datagram with message of the form: %all text1.txt,text2.txt,test3.txt, 
 	    sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
 	}
-	// User is responding to server ping to check connectivity
+	// If user is responding to server ping to check connectivity
 	else if (strncmp(command, "%ack", 4) == 0) {
             pthread_mutex_lock(&user_mutex);
             for (int i = 0; i < user_count; i++) {
                 if (strcmp(user_table[i].username, username) == 0) {
-                    bzero(user_table[i].status, sizeof(user_table[i].status));
+                    
+		    // Set user status back to connected
+		    bzero(user_table[i].status, sizeof(user_table[i].status));
                     strcpy(user_table[i].status, "connected");
-                         
+                    
+	            // Set user's resources back to active	    
 		    for (int j = 0; j < resource_count; ++j) {
                         if (strcmp(user_table[i].username, resource_table[j].owner_name) == 0) {
                             bzero(resource_table[j].status, sizeof(resource_table[j].status));
@@ -228,6 +242,7 @@ int main(int argc, char *argv[]) {
                     }
 		}
             }
+
             displayUserTable(user_table, user_count);
             displayResourceTable(resource_table, resource_count);
 
@@ -238,6 +253,7 @@ int main(int argc, char *argv[]) {
 	    fflush(stdout);
 	}
     }
+
     pthread_mutex_destroy(&user_mutex);
     return 0;
 }
