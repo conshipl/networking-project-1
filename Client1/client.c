@@ -66,7 +66,7 @@ void *receiveDatagrams(void *socket_desc) {
     		sendto(socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
             } 
             else {
-	        printf("Received buffer contents: %s\n", buffer);
+	        printf("Available server resources: %s\n", buffer);
             }
         }
     }

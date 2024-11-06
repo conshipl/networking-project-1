@@ -212,11 +212,13 @@ int main(int argc, char *argv[]) {
 	    bzero(buffer, BUFFER_SIZE);
 	    strcat(buffer, "%all ");
 
-	    // Iterate through resource table and add each one to buffer
+	    // Iterate through resource table and add each one to buffer if it's active
 	    pthread_mutex_lock(&user_mutex);
 	    for (int k = 0; k < resource_count; ++k) {
-		strcat(buffer, resource_table[k].resource_name);
-		strcat(buffer, ",");
+		if (strcmp(resource_table[k].status, "active") == 0) {
+		    strcat(buffer, resource_table[k].resource_name);
+		    strcat(buffer, ",");
+		}
 	    }
 	    pthread_mutex_unlock(&user_mutex);
 
