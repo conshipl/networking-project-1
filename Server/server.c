@@ -14,7 +14,7 @@
 #define BUFFER_SIZE 1024
 #define MAX_USERS 10
 #define MAX_RESOURCES 100
-#define PING_INTERVAL 10
+#define PING_INTERVAL 30
 
 struct User {
     char username[50];
