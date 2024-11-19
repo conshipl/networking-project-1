@@ -74,9 +74,9 @@ void *receiveDatagrams(void *socket_desc) {
     		sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
             }
 	    else if (strncmp(buffer, "send", 4) == 0) {
-		printf("Send received: %s\n", buffer);
 		char ip_addr[BUFFER_SIZE];
 		sscanf(buffer, "send %s", ip_addr);
+		printf("Send address received: %s\n", ip_addr);
 
 		struct in_addr addr;
 		inet_pton(AF_INET, ip_addr, &addr);
@@ -195,7 +195,7 @@ int main(int argc, char *argv[]) {
     udp_sin.sin_family = AF_INET;
     udp_sin.sin_port = htons(UDP_PORT);
     bcopy(hp->h_addr, (char *)&udp_sin.sin_addr, hp->h_length);
-
+    
     // Send hostname and available files to server
     bzero(buffer, BUFFER_SIZE);
     gethostname(buffer, sizeof(buffer));
