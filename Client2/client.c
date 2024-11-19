@@ -73,9 +73,11 @@ void *receiveDatagrams(void *socket_desc) {
     		strcat(buffer, " %ack ping"); // ACKNOWLEDGE
     		sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
             }
-	    else if (strncmp(buffer, "send", 4) == 0) {
+	    else if (strncmp(buffer, "%get", 4) == 0) {
+		char filename[BUFFER_SIZE];
 		char ip_addr[BUFFER_SIZE];
-		sscanf(buffer, "send %s", ip_addr);
+
+		sscanf(buffer, "%%get %s %s", filename, ip_addr);
 		printf("Send address received: %s\n", ip_addr);
 
 		struct in_addr addr;
@@ -96,8 +98,11 @@ void *receiveDatagrams(void *socket_desc) {
 		    exit(1);
 		}
 		
-		char test_msg[] = "Hello";
-		send(tcp_socket, test_msg, strlen(test_msg), 0);
+		bzero(buffer, BUFFER_SIZE);
+		strcpy(buffer, "%get ");
+		strcat(buffer, filename);
+
+		send(tcp_socket, buffer, BUFFER_SIZE, 0);
 
 	    } 
             else {
@@ -130,7 +135,9 @@ void *fileTransfer(void *socket_desc) {
 	bytes_received = recv(tcp_socket_client, buffer, BUFFER_SIZE, 0);
 
 	if (bytes_received > 0) {
-	    printf("%s", buffer); 
+	    if (strncmp(buffer, "%get", 4) == 0) {
+		printf("%s", buffer);
+	    } 
 	}
     }
 

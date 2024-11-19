@@ -263,7 +263,9 @@ int main(int argc, char *argv[]) {
 
 	    for (int j = 0; j < user_count; ++j) {
 		if (strcmp(user_table[j].username, owner_name) == 0) {
-		    strcpy(buffer, "send ");
+		    strcpy(buffer, "%get ");
+		    strcat(buffer, arguments);
+		    strcat(buffer, " ");
 	    	    strcat(buffer, user_table[j].ip_string);    
 		}
 	    }
