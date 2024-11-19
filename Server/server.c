@@ -250,6 +250,26 @@ int main(int argc, char *argv[]) {
 
             pthread_mutex_unlock(&user_mutex);
         }
+	else if (strncmp(command, "%get", 4) == 0) {
+	    bzero(buffer, BUFFER_SIZE);
+
+	    char owner_name[50];
+	
+	    for (int i = 0; i < resource_count; ++i) {
+		if (strcmp(resource_table[i].resource_name, arguments) == 0) {
+		    strcpy(resource_table[i].owner_name, owner_name);
+		}
+	    }
+
+	    for (int j = 0; j < user_count; ++j) {
+		if (strcmp(user_table[j].username, owner_name) == 0) {
+		    strcpy(buffer, "send ");
+	    	    strcat(buffer, user_table[j].ip_string);    
+		}
+	    }
+
+	    sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
+	}
         else {
             printf("Invalid command.");
             fflush(stdout);

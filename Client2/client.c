@@ -5,12 +5,15 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 #include <dirent.h> // for accessing local directory
 #include <unistd.h> // gethostname
 #include <pthread.h>
 
 #define UDP_PORT 5432
+#define TCP_PORT 5433
 #define BUFFER_SIZE 1024
+#define MAX_PENDING 5
 
 /*
  * Opens current directory (./) and iterates through all files within; if
@@ -40,33 +43,64 @@ void registerLocalFiles(char* buffer) {
 // This function is utilized by a separate thread that listens for incoming datagrams and
 // acts on them accordingly.
 void *receiveDatagrams(void *socket_desc) {
-    int socket = *(int *)socket_desc;
+    int udp_socket = *(int *)socket_desc;
+    int tcp_socket;
     char buffer[BUFFER_SIZE];
     struct sockaddr_in udp_sin;
     socklen_t addr_len = sizeof(udp_sin);
+    struct sockaddr_in tcp_sin;
+    socklen_t addr_len_tcp = sizeof(tcp_sin);
     int bytes_received;
     char type_flag[5]; // Buffer to hold flags
     char file_name[256]; // Buffer to hold filenames
 
     while (1) {
-	    fflush(stdout);
-	    bzero(type_flag, sizeof(type_flag));
+        fflush(stdout);
+	bzero(type_flag, sizeof(type_flag));
         bzero(buffer, BUFFER_SIZE);
 
-	    bytes_received = recvfrom(socket, (char *)buffer, BUFFER_SIZE, 0 , (struct sockaddr *)&udp_sin, &addr_len);
+	bytes_received = recvfrom(udp_socket, (char *)buffer, BUFFER_SIZE, 0 , (struct sockaddr *)&udp_sin, &addr_len);
 
-	    if (bytes_received > 0) {
-            // Check if the message is a "ping" from the server
-            if (strcmp(buffer, "ping") == 0) {
-                // Send an "ack" response back to the server
+	if (bytes_received > 0) {
+            
+	    // Check if the message is a "ping" from the server
+            if (strncmp(buffer, "ping", 4) == 0) {
+                
+		// Send an "ack" response back to the server
                 printf("\nping received\n");
-    		    bzero(buffer, BUFFER_SIZE);
-    		    gethostname(buffer, sizeof(buffer));
-    		    strcat(buffer, " %ack ping"); // ACKNOWLEDGE
-    		    sendto(socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
-            } 
+    		bzero(buffer, BUFFER_SIZE);
+    		gethostname(buffer, sizeof(buffer));
+    		strcat(buffer, " %ack ping"); // ACKNOWLEDGE
+    		sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
+            }
+	    else if (strncmp(buffer, "send", 4) == 0) {
+		char ip_addr[BUFFER_SIZE];
+		sscanf(buffer, "send %s", ip_addr);
+
+		struct in_addr addr;
+		inet_pton(AF_INET, ip_addr, &addr);
+		bzero((char *)&tcp_sin, sizeof(tcp_sin));
+		tcp_sin.sin_family = AF_INET;
+		bcopy(&addr, (char *)&tcp_sin.sin_addr, sizeof(addr));
+		tcp_sin.sin_port = htons(TCP_PORT);
+
+		if ((tcp_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
+		    perror("Client: Sending TCP socket");
+		    exit(1);
+		}
+
+		if (connect(tcp_socket, (struct sockaddr *)&tcp_sin, sizeof(tcp_sin)) < 0) {
+		    perror("Client: Connect to Host-Client");
+		    close(tcp_socket);
+		    exit(1);
+		}
+		
+		char test_msg[] = "Hello";
+		send(tcp_socket, test_msg, strlen(test_msg), 0);
+
+	    } 
             else {
-	            printf("Available server resources: %s\n", buffer);
+	        printf("Available server resources: %s\n", buffer);
             }
         }
     }
@@ -74,13 +108,41 @@ void *receiveDatagrams(void *socket_desc) {
     return NULL;
 }
 
+void *fileTransfer(void *socket_desc) {
+    int socket = *(int *)socket_desc;
+    int tcp_socket_client;
+    struct sockaddr_in client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+    char buffer[BUFFER_SIZE];
+    int bytes_received;
+
+    listen(socket, MAX_PENDING);
+
+    while (1) {
+	fflush(stdout);
+
+	if ((tcp_socket_client = accept(socket, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
+	    perror("Client: accept");
+	    continue;
+	}
+
+	bytes_received = recv(tcp_socket_client, buffer, BUFFER_SIZE, 0);
+
+	if (bytes_received > 0) {
+	    printf("%s", buffer); 
+	}
+    }
+}
+
 int main(int argc, char *argv[]) {
     FILE *fp;
     struct sockaddr_in udp_sin;
+    struct sockaddr_in tcp_sin;
     struct hostent *hp;
     char *host;
     char buffer[BUFFER_SIZE];
     int udp_socket;
+    int tcp_socket;
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s host\n", argv[0]);
@@ -88,6 +150,31 @@ int main(int argc, char *argv[]) {
     }
 
     host = argv[1];
+
+    // Build address structure for TCP
+    bzero((char *)&tcp_sin, sizeof(tcp_sin));
+    tcp_sin.sin_family = AF_INET;
+    tcp_sin.sin_addr.s_addr = INADDR_ANY;
+    tcp_sin.sin_port = htons(TCP_PORT);
+
+    // Setup passive open
+    if ((tcp_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Client: TCP socket");
+	exit(1);
+    }
+
+    if ((bind(tcp_socket, (struct sockaddr *)&tcp_sin, sizeof(tcp_sin))) < 0) {
+	perror("Client: Bind TCP socket");
+	exit(1);
+    }
+
+    // Create separate thread to listen for TCP connections
+    pthread_t thread_id_tcp;
+    if (pthread_create(&thread_id_tcp, NULL, fileTransfer, (void *)&tcp_socket) != 0) {
+	perror("Failed to create TCP thread.");
+	close(tcp_socket);
+	exit(1);
+    }
 
     // Translate host name into peer's IP address
     hp = gethostbyname(host);
