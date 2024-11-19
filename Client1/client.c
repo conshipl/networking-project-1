@@ -11,7 +11,7 @@
 #include <pthread.h>
 
 #define UDP_PORT 5432
-#define TCP_PORT 5433
+#define TCP_PORT 5434
 #define BUFFER_SIZE 1024
 #define MAX_PENDING 5
 
@@ -83,7 +83,7 @@ void *receiveDatagrams(void *socket_desc) {
 		bzero((char *)&tcp_sin, sizeof(tcp_sin));
 		tcp_sin.sin_family = AF_INET;
 		bcopy(&addr, (char *)&tcp_sin.sin_addr, sizeof(addr));
-		tcp_sin.sin_port = htons(TCP_PORT);
+		tcp_sin.sin_port = htons(5433);
 
 		if ((tcp_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
 		    perror("Client: Sending TCP socket");
