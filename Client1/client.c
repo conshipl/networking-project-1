@@ -73,25 +73,35 @@ void *receiveDatagrams(void *socket_desc) {
     		strcat(buffer, " %ack ping"); // ACKNOWLEDGE
     		sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
             }
+	    // Check if the message is server response to this client's get request
 	    else if (strncmp(buffer, "%get", 4) == 0) {
 		char filename[BUFFER_SIZE];
 		char ip_addr[BUFFER_SIZE];
 
+		/* 
+		 * Server response will come in the form of:
+		 * %get <filename> <IP address of client-who-has-the-file>
+		 *
+		 * Split off into filename and ip_addr variables for later use
+		 */
 		sscanf(buffer, "%%get %s %s", filename, ip_addr);
 		printf("Send address received: %s\n", ip_addr);
 
+		// Create address structure for IP address received from server
 		struct in_addr addr;
 		inet_pton(AF_INET, ip_addr, &addr);
 		bzero((char *)&tcp_sin, sizeof(tcp_sin));
 		tcp_sin.sin_family = AF_INET;
 		bcopy(&addr, (char *)&tcp_sin.sin_addr, sizeof(addr));
-		tcp_sin.sin_port = htons(5433);
+		tcp_sin.sin_port = htons(5433); // hard-coded port of client-who-has-the-file :(
 
+		// Create socket for client-to-client TCP connection
 		if ((tcp_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
 		    perror("Client: Sending TCP socket");
 		    exit(1);
 		}
 
+		// Connect to client-who-has-the-file
 		if (connect(tcp_socket, (struct sockaddr *)&tcp_sin, sizeof(tcp_sin)) < 0) {
 		    perror("Client: Connect to Host-Client");
 		    close(tcp_socket);
@@ -102,7 +112,22 @@ void *receiveDatagrams(void *socket_desc) {
 		strcpy(buffer, "%get ");
 		strcat(buffer, filename);
 
+		// Send get request to client-who-has-the-file: %get <filename>
 		send(tcp_socket, buffer, BUFFER_SIZE, 0);
+		
+		// Open file for writing data received from client-who-has-the-file
+		FILE *file = fopen(filename, "wb");
+		if (file == NULL) {
+		    perror("Error opening file for writing.");
+		    exit(1);
+		}
+
+		// Receive file from client-who-has-the-file
+		int bytes_received;
+		bzero(buffer, BUFFER_SIZE);
+		while((bytes_received = recv(tcp_socket, buffer, BUFFER_SIZE, 0)) > 0) {
+		    fwrite(buffer, sizeof(char), bytes_received, file);
+		}
 
 	    } 
             else {
@@ -114,6 +139,10 @@ void *receiveDatagrams(void *socket_desc) {
     return NULL;
 }
 
+/*
+ * This function is utilized by a third thread that listens for incoming connections
+ * on the TCP socket (get requests) and sends back the requested file.
+ */
 void *fileTransfer(void *socket_desc) {
     int socket = *(int *)socket_desc;
     int tcp_socket_client;
@@ -126,7 +155,8 @@ void *fileTransfer(void *socket_desc) {
 
     while (1) {
 	fflush(stdout);
-
+	
+	// Accept new TCP connection
 	if ((tcp_socket_client = accept(socket, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
 	    perror("Client: accept");
 	    continue;
@@ -135,8 +165,33 @@ void *fileTransfer(void *socket_desc) {
 	bytes_received = recv(tcp_socket_client, buffer, BUFFER_SIZE, 0);
 
 	if (bytes_received > 0) {
+	    // Check if message is a get request
 	    if (strncmp(buffer, "%get", 4) == 0) {
-		printf("%s", buffer);
+		
+		// Get requested filename
+		char filename[BUFFER_SIZE];
+		sscanf(buffer, "%%get %s", filename);
+
+		// Open requested file
+		FILE *file = fopen(filename, "rb");
+		if (file == NULL) {
+		    perror("File open failed.");
+		    exit(1);
+		}
+		
+		// Send requested file
+		int bytes_read;
+		bzero(buffer, BUFFER_SIZE);
+		while ((bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, file)) > 0) {
+		    if (send(tcp_socket_client, buffer, bytes_read, 0) == -1) {
+			perror("Error sending file to client.");
+			fclose(file);
+			exit(1);
+		    }
+		}
+
+		fclose(file);
+		printf("File '%s' sent to client\n", filename);
 	    } 
 	}
     }
@@ -178,7 +233,7 @@ int main(int argc, char *argv[]) {
 	exit(1);
     }
 
-    // Create separate thread to listen for TCP connections
+    // Create separate thread to listen for TCP connections/get requests
     pthread_t thread_id_tcp;
     if (pthread_create(&thread_id_tcp, NULL, fileTransfer, (void *)&tcp_socket) != 0) {
 	perror("Failed to create TCP thread.");
