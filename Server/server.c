@@ -257,7 +257,7 @@ int main(int argc, char *argv[]) {
 	
 	    for (int i = 0; i < resource_count; ++i) {
 		if (strcmp(resource_table[i].resource_name, arguments) == 0) {
-		    strcpy(resource_table[i].owner_name, owner_name);
+		    strcpy(owner_name, resource_table[i].owner_name);
 		}
 	    }
 
