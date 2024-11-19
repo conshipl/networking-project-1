@@ -133,6 +133,8 @@ void *fileTransfer(void *socket_desc) {
 	    printf("%s", buffer); 
 	}
     }
+
+    return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -237,7 +239,9 @@ int main(int argc, char *argv[]) {
     }
 
     // When user exits, close separate listener thread
+    pthread_cancel(thread_id_tcp);
     pthread_cancel(thread_id);
+    close(tcp_socket);
     close(udp_socket);
 
     return 0;
