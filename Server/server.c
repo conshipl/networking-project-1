@@ -63,7 +63,7 @@ void processDatagram(char* buffer, char* username, char* command, char* argument
 void displayUserTable(struct User user_table[MAX_USERS], int user_count) {
     printf("\nUser Name\t\tStatus\n");
     for (int i = 0; i < user_count; ++i) {
-        printf("%s\t\t\t%s\n", user_table[i].username, user_table[i].status); 
+        printf("%s\t\t\t%s\t%s\n", user_table[i].username, user_table[i].status, user_table[i].ip_string); 
     }
     fflush(stdout);   
 }
