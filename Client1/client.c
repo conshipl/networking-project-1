@@ -74,6 +74,7 @@ void *receiveDatagrams(void *socket_desc) {
     		sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
             }
 	    else if (strncmp(buffer, "send", 4) == 0) {
+		printf("Send received: %s\n", buffer);
 		char ip_addr[BUFFER_SIZE];
 		sscanf(buffer, "send %s", ip_addr);
 
