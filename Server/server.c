@@ -65,7 +65,8 @@ void displayUserTable(struct User user_table[MAX_USERS], int user_count) {
     for (int i = 0; i < user_count; ++i) {
         printf("%s\t\t\t%s\t%s\n", user_table[i].username, user_table[i].status, user_table[i].ip_string); 
     }
-    fflush(stdout);   
+    printf("\n");
+    fflush(stdout);
 }
 
 void displayResourceTable(struct Resource resource_table[MAX_RESOURCES], int resource_count) {
@@ -109,7 +110,7 @@ void* pingClients(void* arg) {
         }
 
 	    displayUserTable(user_table, user_count);
-	    displayResourceTable(resource_table, resource_count);
+	    //displayResourceTable(resource_table, resource_count);
 
 	    pthread_mutex_unlock(&user_mutex);
     }
@@ -250,28 +251,28 @@ int main(int argc, char *argv[]) {
 
             pthread_mutex_unlock(&user_mutex);
         }
-	else if (strncmp(command, "%get", 4) == 0) {
-	    bzero(buffer, BUFFER_SIZE);
+        else if (strncmp(command, "%get", 4) == 0) {
+            bzero(buffer, BUFFER_SIZE);
 
-	    char owner_name[50];
-	
-	    for (int i = 0; i < resource_count; ++i) {
-		if (strcmp(resource_table[i].resource_name, arguments) == 0) {
-		    strcpy(owner_name, resource_table[i].owner_name);
-		}
-	    }
+            char owner_name[50];
+        
+            for (int i = 0; i < resource_count; ++i) {
+                if (strcmp(resource_table[i].resource_name, arguments) == 0) {
+                    strcpy(owner_name, resource_table[i].owner_name);
+                }
+            }
 
-	    for (int j = 0; j < user_count; ++j) {
-		if (strcmp(user_table[j].username, owner_name) == 0) {
-		    strcpy(buffer, "%get ");
-		    strcat(buffer, arguments);
-		    strcat(buffer, " ");
-	    	    strcat(buffer, user_table[j].ip_string);    
-		}
-	    }
+            for (int j = 0; j < user_count; ++j) {
+                if (strcmp(user_table[j].username, owner_name) == 0) {
+                    strcpy(buffer, "%get ");
+                    strcat(buffer, arguments);
+                    strcat(buffer, " ");
+                    strcat(buffer, user_table[j].ip_string);    
+                }
+            }
 
-	    sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
-	}
+            sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
+        }
         else {
             printf("Invalid command.");
             fflush(stdout);

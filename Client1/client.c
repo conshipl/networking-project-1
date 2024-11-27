@@ -27,12 +27,12 @@ void registerLocalFiles(char* buffer) {
     strcat(buffer, " ");
 
     if (d) {
-	while ((dir = readdir(d)) != NULL) {
-	    if (strstr(dir->d_name, ".txt")) {
-		strcat(buffer, dir->d_name);
-		strcat(buffer, ",");
-	    }
-	}
+		while ((dir = readdir(d)) != NULL) {
+			if (strstr(dir->d_name, ".txt")) {
+				strcat(buffer, dir->d_name);
+				strcat(buffer, ",");
+			}
+		}
 
 	closedir(d);
     }
@@ -56,82 +56,82 @@ void *receiveDatagrams(void *socket_desc) {
 
     while (1) {
         fflush(stdout);
-	bzero(type_flag, sizeof(type_flag));
+		bzero(type_flag, sizeof(type_flag));
         bzero(buffer, BUFFER_SIZE);
 
-	bytes_received = recvfrom(udp_socket, (char *)buffer, BUFFER_SIZE, 0 , (struct sockaddr *)&udp_sin, &addr_len);
+		bytes_received = recvfrom(udp_socket, (char *)buffer, BUFFER_SIZE, 0 , (struct sockaddr *)&udp_sin, &addr_len);
 
-	if (bytes_received > 0) {
-            
-	    // Check if the message is a "ping" from the server
-            if (strncmp(buffer, "ping", 4) == 0) {
-                
-		// Send an "ack" response back to the server
-                printf("\nping received\n");
-    		bzero(buffer, BUFFER_SIZE);
-    		gethostname(buffer, sizeof(buffer));
-    		strcat(buffer, " %ack ping"); // ACKNOWLEDGE
-    		sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
-            }
-	    // Check if the message is server response to this client's get request
-	    else if (strncmp(buffer, "%get", 4) == 0) {
-		char filename[BUFFER_SIZE];
-		char ip_addr[BUFFER_SIZE];
+		if (bytes_received > 0) {
+				
+			// Check if the message is a "ping" from the server
+			if (strncmp(buffer, "ping", 4) == 0) {
+					
+				// Send an "ack" response back to the server
+				printf("\nping received\n");
+				bzero(buffer, BUFFER_SIZE);
+				gethostname(buffer, sizeof(buffer));
+				strcat(buffer, " %ack ping"); // ACKNOWLEDGE
+				sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
+			}
+			// Check if the message is server response to this client's get request
+			else if (strncmp(buffer, "%get", 4) == 0) {
+				char filename[BUFFER_SIZE];
+				char ip_addr[BUFFER_SIZE];
 
-		/* 
-		 * Server response will come in the form of:
-		 * %get <filename> <IP address of client-who-has-the-file>
-		 *
-		 * Split off into filename and ip_addr variables for later use
-		 */
-		sscanf(buffer, "%%get %s %s", filename, ip_addr);
-		printf("Send address received: %s\n", ip_addr);
+				/* 
+				* Server response will come in the form of:
+				* %get <filename> <IP address of client-who-has-the-file>
+				*
+				* Split off into filename and ip_addr variables for later use
+				*/
+				sscanf(buffer, "%%get %s %s", filename, ip_addr);
+				printf("Send address received: %s\n", ip_addr);
 
-		// Create address structure for IP address received from server
-		struct in_addr addr;
-		inet_pton(AF_INET, ip_addr, &addr);
-		bzero((char *)&tcp_sin, sizeof(tcp_sin));
-		tcp_sin.sin_family = AF_INET;
-		bcopy(&addr, (char *)&tcp_sin.sin_addr, sizeof(addr));
-		tcp_sin.sin_port = htons(5433); // hard-coded port of client-who-has-the-file :(
+				// Create address structure for IP address received from server
+				struct in_addr addr;
+				inet_pton(AF_INET, ip_addr, &addr);
+				bzero((char *)&tcp_sin, sizeof(tcp_sin));
+				tcp_sin.sin_family = AF_INET;
+				bcopy(&addr, (char *)&tcp_sin.sin_addr, sizeof(addr));
+				tcp_sin.sin_port = htons(5433); // hard-coded port of client-who-has-the-file :(
 
-		// Create socket for client-to-client TCP connection
-		if ((tcp_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
-		    perror("Client: Sending TCP socket");
-		    exit(1);
-		}
+				// Create socket for client-to-client TCP connection
+				if ((tcp_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
+					perror("Client: Sending TCP socket");
+					exit(1);
+				}
 
-		// Connect to client-who-has-the-file
-		if (connect(tcp_socket, (struct sockaddr *)&tcp_sin, sizeof(tcp_sin)) < 0) {
-		    perror("Client: Connect to Host-Client");
-		    close(tcp_socket);
-		    exit(1);
-		}
-		
-		bzero(buffer, BUFFER_SIZE);
-		strcpy(buffer, "%get ");
-		strcat(buffer, filename);
+				// Connect to client-who-has-the-file
+				if (connect(tcp_socket, (struct sockaddr *)&tcp_sin, sizeof(tcp_sin)) < 0) {
+					perror("Client: Connect to Host-Client");
+					close(tcp_socket);
+					exit(1);
+				}
+				
+				bzero(buffer, BUFFER_SIZE);
+				strcpy(buffer, "%get ");
+				strcat(buffer, filename);
 
-		// Send get request to client-who-has-the-file: %get <filename>
-		send(tcp_socket, buffer, BUFFER_SIZE, 0);
-		
-		// Open file for writing data received from client-who-has-the-file
-		FILE *file = fopen(filename, "wb");
-		if (file == NULL) {
-		    perror("Error opening file for writing.");
-		    exit(1);
-		}
+				// Send get request to client-who-has-the-file: %get <filename>
+				send(tcp_socket, buffer, BUFFER_SIZE, 0);
+				
+				// Open file for writing data received from client-who-has-the-file
+				FILE *file = fopen(filename, "wb");
+				if (file == NULL) {
+					perror("Error opening file for writing.");
+					exit(1);
+				}
 
-		// Receive file from client-who-has-the-file
-		int bytes_received;
-		bzero(buffer, BUFFER_SIZE);
-		while((bytes_received = recv(tcp_socket, buffer, BUFFER_SIZE, 0)) > 0) {
-		    fwrite(buffer, sizeof(char), bytes_received, file);
-		}
+				// Receive file from client-who-has-the-file
+				int bytes_received;
+				bzero(buffer, BUFFER_SIZE);
+				while((bytes_received = recv(tcp_socket, buffer, BUFFER_SIZE, 0)) > 0) {
+					fwrite(buffer, sizeof(char), bytes_received, file);
+				}
 
-	    } 
+			} 
             else {
-	        printf("Available server resources: %s\n", buffer);
+	        	printf("Available server resources: %s\n", buffer);
             }
         }
     }
@@ -154,46 +154,49 @@ void *fileTransfer(void *socket_desc) {
     listen(socket, MAX_PENDING);
 
     while (1) {
-	fflush(stdout);
-	
-	// Accept new TCP connection
-	if ((tcp_socket_client = accept(socket, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
-	    perror("Client: accept");
-	    continue;
-	}
-
-	bytes_received = recv(tcp_socket_client, buffer, BUFFER_SIZE, 0);
-
-	if (bytes_received > 0) {
-	    // Check if message is a get request
-	    if (strncmp(buffer, "%get", 4) == 0) {
+		fflush(stdout);
 		
-		// Get requested filename
-		char filename[BUFFER_SIZE];
-		sscanf(buffer, "%%get %s", filename);
-
-		// Open requested file
-		FILE *file = fopen(filename, "rb");
-		if (file == NULL) {
-		    perror("File open failed.");
-		    exit(1);
+		// Accept new TCP connection
+		if ((tcp_socket_client = accept(socket, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
+			perror("Client: accept");
+			continue;
 		}
-		
-		// Send requested file
-		int bytes_read;
-		bzero(buffer, BUFFER_SIZE);
-		while ((bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, file)) > 0) {
-		    if (send(tcp_socket_client, buffer, bytes_read, 0) == -1) {
-			perror("Error sending file to client.");
-			fclose(file);
-			exit(1);
-		    }
+		else{
+			printf("TCP connected");
 		}
 
-		fclose(file);
-		printf("File '%s' sent to client\n", filename);
-	    } 
-	}
+		bytes_received = recv(tcp_socket_client, buffer, BUFFER_SIZE, 0);
+
+		if (bytes_received > 0) {
+			// Check if message is a get request
+			if (strncmp(buffer, "%get", 4) == 0) {
+			
+				// Get requested filename
+				char filename[BUFFER_SIZE];
+				sscanf(buffer, "%%get %s", filename);
+
+				// Open requested file
+				FILE *file = fopen(filename, "rb");
+				if (file == NULL) {
+					perror("File open failed.");
+					exit(1);
+				}
+				
+				// Send requested file
+				int bytes_read;
+				bzero(buffer, BUFFER_SIZE);
+				while ((bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, file)) > 0) {
+					if (send(tcp_socket_client, buffer, bytes_read, 0) == -1) {
+						perror("Error sending file to client.");
+						fclose(file);
+						exit(1);
+					}
+				}
+
+				fclose(file);
+				printf("File '%s' sent to client\n", filename);
+			} 
+		}
     }
 
     return NULL;
@@ -225,20 +228,20 @@ int main(int argc, char *argv[]) {
     // Setup passive open
     if ((tcp_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Client: TCP socket");
-	exit(1);
+		exit(1);
     }
 
     if ((bind(tcp_socket, (struct sockaddr *)&tcp_sin, sizeof(tcp_sin))) < 0) {
-	perror("Client: Bind TCP socket");
-	exit(1);
+		perror("Client: Bind TCP socket");
+		exit(1);
     }
 
     // Create separate thread to listen for TCP connections/get requests
     pthread_t thread_id_tcp;
     if (pthread_create(&thread_id_tcp, NULL, fileTransfer, (void *)&tcp_socket) != 0) {
-	perror("Failed to create TCP thread.");
-	close(tcp_socket);
-	exit(1);
+		perror("Failed to create TCP thread.");
+		close(tcp_socket);
+		exit(1);
     }
 
     // Translate host name into peer's IP address
