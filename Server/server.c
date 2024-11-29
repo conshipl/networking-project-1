@@ -154,12 +154,12 @@ int main(int argc, char *argv[]) {
     pthread_create(&ping_thread, NULL, pingClients, (void*)&udp_socket);
     
     while (1) {
-	    // Receive datagram
-	    bzero(buffer, BUFFER_SIZE);
-	    recvfrom(udp_socket, (char *)buffer, BUFFER_SIZE, 0, (struct sockaddr *)&udp_sin, &addr_len);
-	
-	    printf("%s\n", buffer);
-	    fflush(stdout);
+        // Receive datagram
+        bzero(buffer, BUFFER_SIZE);
+        recvfrom(udp_socket, (char *)buffer, BUFFER_SIZE, 0, (struct sockaddr *)&udp_sin, &addr_len);
+
+        printf("%s\n", buffer);
+        fflush(stdout);
 	
         // Split datagram into parts
         // Expected format: <hostname> <command> <argument1>,<argument2>,...

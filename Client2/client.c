@@ -123,12 +123,20 @@ void *receiveDatagrams(void *socket_desc) {
 				}
 
 				// Receive file from client-who-has-the-file
-				int bytes_received;
 				bzero(buffer, BUFFER_SIZE);
-				while((bytes_received = recv(tcp_socket, buffer, BUFFER_SIZE, 0)) > 0) {
+				int bytes_received = recv(tcp_socket, buffer, BUFFER_SIZE, 0);
+				if (bytes_received > 0) {
+					//printf("received: %s", buffer);
 					fwrite(buffer, sizeof(char), bytes_received, file);
+				} else if (bytes_received == 0) {
+					printf("Connection closed by peer\n");
+					break;  // End the loop if no data is received (connection closed)
+				} else {
+					perror("recv failed");
+					break; 
 				}
 
+				fclose(file);
 	    	} 
             else {
 	        	printf("Available server resources: %s\n", buffer);
@@ -161,6 +169,9 @@ void *fileTransfer(void *socket_desc) {
 			perror("Client: accept");
 			continue;
 		}
+		else{
+			printf("TCP connected");
+		}
 
 		bytes_received = recv(tcp_socket_client, buffer, BUFFER_SIZE, 0);
 
@@ -183,6 +194,7 @@ void *fileTransfer(void *socket_desc) {
 				int bytes_read;
 				bzero(buffer, BUFFER_SIZE);
 				while ((bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, file)) > 0) {
+					//printf("\nsending buffer:\n%s\n", buffer);
 					if (send(tcp_socket_client, buffer, bytes_read, 0) == -1) {
 						perror("Error sending file to client.");
 						fclose(file);

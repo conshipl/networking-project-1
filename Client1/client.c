@@ -89,11 +89,17 @@ void *receiveDatagrams(void *socket_desc) {
 
 				// Create address structure for IP address received from server
 				struct in_addr addr;
-				inet_pton(AF_INET, ip_addr, &addr);
+				if (inet_pton(AF_INET, ip_addr, &addr)<= 0) {
+					perror("inet_pton failed");
+				} else {
+					//printf("Conversion successful!\n");
+				}
 				bzero((char *)&tcp_sin, sizeof(tcp_sin));
 				tcp_sin.sin_family = AF_INET;
 				bcopy(&addr, (char *)&tcp_sin.sin_addr, sizeof(addr));
 				tcp_sin.sin_port = htons(5433); // hard-coded port of client-who-has-the-file :(
+
+				//printf("test1");
 
 				// Create socket for client-to-client TCP connection
 				if ((tcp_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
@@ -101,12 +107,16 @@ void *receiveDatagrams(void *socket_desc) {
 					exit(1);
 				}
 
+				//printf("test2");
+
 				// Connect to client-who-has-the-file
 				if (connect(tcp_socket, (struct sockaddr *)&tcp_sin, sizeof(tcp_sin)) < 0) {
 					perror("Client: Connect to Host-Client");
 					close(tcp_socket);
 					exit(1);
 				}
+
+				//printf("test3");
 				
 				bzero(buffer, BUFFER_SIZE);
 				strcpy(buffer, "%get ");
@@ -122,13 +132,23 @@ void *receiveDatagrams(void *socket_desc) {
 					exit(1);
 				}
 
+				//printf("test4");
+
 				// Receive file from client-who-has-the-file
-				int bytes_received;
 				bzero(buffer, BUFFER_SIZE);
-				while((bytes_received = recv(tcp_socket, buffer, BUFFER_SIZE, 0)) > 0) {
+				int bytes_received = recv(tcp_socket, buffer, BUFFER_SIZE, 0);
+				if (bytes_received > 0) {
+					//printf("received: %s", buffer);
 					fwrite(buffer, sizeof(char), bytes_received, file);
+				} else if (bytes_received == 0) {
+					printf("Connection closed by peer.\n");
+					break;  // End the loop if no data is received (connection closed).
+				} else {
+					perror("recv failed");
+					break;  // Handle recv failure.
 				}
 
+				fclose(file);
 			} 
             else {
 	        	printf("Available server resources: %s\n", buffer);
@@ -186,6 +206,7 @@ void *fileTransfer(void *socket_desc) {
 				int bytes_read;
 				bzero(buffer, BUFFER_SIZE);
 				while ((bytes_read = fread(buffer, sizeof(char), BUFFER_SIZE, file)) > 0) {
+					//printf("\nsending buffer:\n%s\n", buffer);
 					if (send(tcp_socket_client, buffer, bytes_read, 0) == -1) {
 						perror("Error sending file to client.");
 						fclose(file);
