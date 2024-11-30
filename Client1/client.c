@@ -35,7 +35,7 @@ void registerLocalFiles(char* buffer) {
 		}
 
 	closedir(d);
-    }
+	}
 }
 
 // Main thread: accepts user input commands and sends them to the server.
@@ -77,15 +77,18 @@ void *receiveDatagrams(void *socket_desc) {
 			else if (strncmp(buffer, "%get", 4) == 0) {
 				char filename[BUFFER_SIZE];
 				char ip_addr[BUFFER_SIZE];
+				char port_get[10];
 
 				/* 
 				* Server response will come in the form of:
-				* %get <filename> <IP address of client-who-has-the-file>
+				* %get <filename> <IP address of client-who-has-the-file> <TCP port of client-who-has-the-file>
 				*
-				* Split off into filename and ip_addr variables for later use
+				* Split off into filename, ip_addr, and port_get variables for later use
 				*/
-				sscanf(buffer, "%%get %s %s", filename, ip_addr);
+				sscanf(buffer, "%%get %s %s %s", filename, ip_addr, port_get);
 				printf("Send address received: %s\n", ip_addr);
+    			int port_int = atoi(port_get);
+				printf("Send port received: %s\n", port_get);
 
 				// Create address structure for IP address received from server
 				struct in_addr addr;
@@ -97,7 +100,7 @@ void *receiveDatagrams(void *socket_desc) {
 				bzero((char *)&tcp_sin, sizeof(tcp_sin));
 				tcp_sin.sin_family = AF_INET;
 				bcopy(&addr, (char *)&tcp_sin.sin_addr, sizeof(addr));
-				tcp_sin.sin_port = htons(5433); // hard-coded port of client-who-has-the-file :(
+				tcp_sin.sin_port = htons(port_int);
 
 				//printf("test1");
 
@@ -182,7 +185,7 @@ void *fileTransfer(void *socket_desc) {
 			continue;
 		}
 		else{
-			printf("TCP connected");
+			printf("TCP connected\n");
 		}
 
 		bytes_received = recv(tcp_socket_client, buffer, BUFFER_SIZE, 0);
@@ -232,6 +235,7 @@ int main(int argc, char *argv[]) {
     char buffer[BUFFER_SIZE];
     int udp_socket;
     int tcp_socket;
+	char port[10];
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s host\n", argv[0]);
@@ -284,11 +288,15 @@ int main(int argc, char *argv[]) {
     udp_sin.sin_port = htons(UDP_PORT);
     bcopy(hp->h_addr, (char *)&udp_sin.sin_addr, hp->h_length);
     
+	sprintf(port, "%d", TCP_PORT);
+
     // Send hostname and available files to server
     bzero(buffer, BUFFER_SIZE);
     gethostname(buffer, sizeof(buffer));
-    strcat(buffer, " %cnct"); // CONNECT
+    strcat(buffer, " %cnct "); // CONNECT
+	strcat(buffer, port); // PORT
     registerLocalFiles(buffer);
+	printf("%s\n", buffer);
     sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
 
     // Create separate thread to listen for datagrams from the server

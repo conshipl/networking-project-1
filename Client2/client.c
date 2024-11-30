@@ -34,8 +34,8 @@ void registerLocalFiles(char* buffer) {
 			}
 		}
 
-		closedir(d);
-    }
+	closedir(d);
+	}
 }
 
 // Main thread: accepts user input commands and sends them to the server.
@@ -62,38 +62,47 @@ void *receiveDatagrams(void *socket_desc) {
 		bytes_received = recvfrom(udp_socket, (char *)buffer, BUFFER_SIZE, 0 , (struct sockaddr *)&udp_sin, &addr_len);
 
 		if (bytes_received > 0) {
-            
-	    	// Check if the message is a "ping" from the server
-            if (strncmp(buffer, "ping", 4) == 0) {
-                
+				
+			// Check if the message is a "ping" from the server
+			if (strncmp(buffer, "ping", 4) == 0) {
+					
 				// Send an "ack" response back to the server
-                printf("\nping received\n");
+				printf("\nping received\n");
 				bzero(buffer, BUFFER_SIZE);
 				gethostname(buffer, sizeof(buffer));
 				strcat(buffer, " %ack ping"); // ACKNOWLEDGE
 				sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, addr_len);
-            }
+			}
 			// Check if the message is server response to this client's get request
 			else if (strncmp(buffer, "%get", 4) == 0) {
 				char filename[BUFFER_SIZE];
 				char ip_addr[BUFFER_SIZE];
+				char port_get[10];
 
 				/* 
 				* Server response will come in the form of:
-				* %get <filename> <IP address of client-who-has-the-file>
+				* %get <filename> <IP address of client-who-has-the-file> <TCP port of client-who-has-the-file>
 				*
-				* Split off into filename and ip_addr variables for later use
+				* Split off into filename, ip_addr, and port_get variables for later use
 				*/
-				sscanf(buffer, "%%get %s %s", filename, ip_addr);
+				sscanf(buffer, "%%get %s %s %s", filename, ip_addr, port_get);
 				printf("Send address received: %s\n", ip_addr);
+    			int port_int = atoi(port_get);
+				printf("Send port received: %s\n", port_get);
 
 				// Create address structure for IP address received from server
 				struct in_addr addr;
-				inet_pton(AF_INET, ip_addr, &addr);
+				if (inet_pton(AF_INET, ip_addr, &addr)<= 0) {
+					perror("inet_pton failed");
+				} else {
+					//printf("Conversion successful!\n");
+				}
 				bzero((char *)&tcp_sin, sizeof(tcp_sin));
 				tcp_sin.sin_family = AF_INET;
 				bcopy(&addr, (char *)&tcp_sin.sin_addr, sizeof(addr));
-				tcp_sin.sin_port = htons(5434); // hard-coded port of client-who-has-the-file :(
+				tcp_sin.sin_port = htons(port_int);
+
+				//printf("test1");
 
 				// Create socket for client-to-client TCP connection
 				if ((tcp_socket = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
@@ -101,12 +110,16 @@ void *receiveDatagrams(void *socket_desc) {
 					exit(1);
 				}
 
+				//printf("test2");
+
 				// Connect to client-who-has-the-file
 				if (connect(tcp_socket, (struct sockaddr *)&tcp_sin, sizeof(tcp_sin)) < 0) {
 					perror("Client: Connect to Host-Client");
 					close(tcp_socket);
 					exit(1);
 				}
+
+				//printf("test3");
 				
 				bzero(buffer, BUFFER_SIZE);
 				strcpy(buffer, "%get ");
@@ -122,6 +135,8 @@ void *receiveDatagrams(void *socket_desc) {
 					exit(1);
 				}
 
+				//printf("test4");
+
 				// Receive file from client-who-has-the-file
 				bzero(buffer, BUFFER_SIZE);
 				int bytes_received = recv(tcp_socket, buffer, BUFFER_SIZE, 0);
@@ -129,15 +144,15 @@ void *receiveDatagrams(void *socket_desc) {
 					//printf("received: %s", buffer);
 					fwrite(buffer, sizeof(char), bytes_received, file);
 				} else if (bytes_received == 0) {
-					printf("Connection closed by peer\n");
-					break;  // End the loop if no data is received (connection closed)
+					printf("Connection closed by peer.\n");
+					break;  // End the loop if no data is received (connection closed).
 				} else {
 					perror("recv failed");
-					break; 
+					break;  // Handle recv failure.
 				}
 
 				fclose(file);
-	    	} 
+			} 
             else {
 	        	printf("Available server resources: %s\n", buffer);
             }
@@ -163,14 +178,14 @@ void *fileTransfer(void *socket_desc) {
 
     while (1) {
 		fflush(stdout);
-	
+		
 		// Accept new TCP connection
 		if ((tcp_socket_client = accept(socket, (struct sockaddr*)&client_addr, &addr_len)) < 0) {
 			perror("Client: accept");
 			continue;
 		}
 		else{
-			printf("TCP connected");
+			printf("TCP connected\n");
 		}
 
 		bytes_received = recv(tcp_socket_client, buffer, BUFFER_SIZE, 0);
@@ -220,6 +235,7 @@ int main(int argc, char *argv[]) {
     char buffer[BUFFER_SIZE];
     int udp_socket;
     int tcp_socket;
+	char port[10];
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s host\n", argv[0]);
@@ -272,11 +288,15 @@ int main(int argc, char *argv[]) {
     udp_sin.sin_port = htons(UDP_PORT);
     bcopy(hp->h_addr, (char *)&udp_sin.sin_addr, hp->h_length);
     
+	sprintf(port, "%d", TCP_PORT);
+
     // Send hostname and available files to server
     bzero(buffer, BUFFER_SIZE);
     gethostname(buffer, sizeof(buffer));
-    strcat(buffer, " %cnct"); // CONNECT
+    strcat(buffer, " %cnct "); // CONNECT
+	strcat(buffer, port); // PORT
     registerLocalFiles(buffer);
+	printf("%s\n", buffer);
     sendto(udp_socket, buffer, strlen(buffer), 0, (struct sockaddr *)&udp_sin, sizeof(udp_sin));
 
     // Create separate thread to listen for datagrams from the server

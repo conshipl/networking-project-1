@@ -22,6 +22,7 @@ struct User {
     char status[15];
     struct sockaddr_in address;
     char ip_string[INET_ADDRSTRLEN]; 
+    int port;
 };
 
 struct Resource {
@@ -43,27 +44,29 @@ pthread_mutex_t user_mutex; // Mutex for thread-safe access to user_table and re
  * Expected format of buffer: <hostname> <command> <argument1>,<argument2>,...
  * Example: LAPTOP-XJ10456 %cnct text1.txt,text2.txt,
  */ 
-void processDatagram(char* buffer, char* username, char* command, char* arguments) {
-    bzero(username, sizeof(username));
-    bzero(command, sizeof(command));
-    bzero(arguments, sizeof(arguments));
-	
+void processDatagram(char* buffer, char* username, char* command, char* port, char* arguments) {
+    bzero(username, strlen(username));
+    bzero(command, strlen(command));
+    bzero(port, strlen(port));
+    bzero(arguments, strlen(arguments));
+
     char* token = strtok(buffer, " ");
-    strcpy(username, token);
+    if (token != NULL) strcpy(username, token);
 
     token = strtok(NULL, " ");
-    strcpy(command, token);
+    if (token != NULL) strcpy(command, token);
 
-    if (token != NULL) {
-        token = strtok(NULL, " ");
-        strcpy(arguments, token);
-    }
+    token = strtok(NULL, " ");
+    if (token != NULL) strcpy(port, token);
+
+    token = strtok(NULL, " ");
+    if (token != NULL) strcpy(arguments, token);
 }
 
 void displayUserTable(struct User user_table[MAX_USERS], int user_count) {
-    printf("\nUser Name\t\tStatus\n");
+    printf("\nUser Name\t\tStatus\t\tTCP Port\n");
     for (int i = 0; i < user_count; ++i) {
-        printf("%s\t\t\t%s\t%s\n", user_table[i].username, user_table[i].status, user_table[i].ip_string); 
+        printf("%s\t\t%s\t%d\n", user_table[i].username, user_table[i].status, user_table[i].port); 
     }
     printf("\n");
     fflush(stdout);
@@ -72,7 +75,7 @@ void displayUserTable(struct User user_table[MAX_USERS], int user_count) {
 void displayResourceTable(struct Resource resource_table[MAX_RESOURCES], int resource_count) {
     printf("\nResource Name\t\tResource Owner\t\tStatus\n");
     for (int j = 0; j < resource_count; ++j) {
-        printf("%s\t\t%s\t\t\t%s\n", resource_table[j].resource_name, resource_table[j].owner_name, resource_table[j].status);
+        printf("%s\t\t%s\t\t%s\n", resource_table[j].resource_name, resource_table[j].owner_name, resource_table[j].status);
     }
     fflush(stdout);
 }
@@ -126,6 +129,7 @@ int main(int argc, char *argv[]) {
     char username[50];
     char command[5];
     char arguments[200];
+    char port[200];
     char buffer[BUFFER_SIZE];
     int udp_socket;
 
@@ -164,8 +168,10 @@ int main(int argc, char *argv[]) {
         // Split datagram into parts
         // Expected format: <hostname> <command> <argument1>,<argument2>,...
         // Example: LAPTOP-XJ10456 %cnct text1.txt,text2.txt,
-        processDatagram(buffer, username, command, arguments);
+        processDatagram(buffer, username, command, port, arguments);
         
+        //printf("\n%s\n", command);
+
         // Determine datagram command
         // If new connection
         if (strncmp(command, "%cnct", 5) == 0) {
@@ -176,6 +182,8 @@ int main(int argc, char *argv[]) {
                 strcpy(user_table[user_count].username, username);
 		        user_table[user_count].ip_address = udp_sin.sin_addr;
 		        user_table[user_count].address = udp_sin;
+                int port_int = atoi(port);
+                user_table[user_count].port = port_int;
                 
 		        // Convert IP address to string and store in ip_string
                 inet_ntop(AF_INET, &(user_table[user_count].ip_address), user_table[user_count].ip_string, INET_ADDRSTRLEN);
@@ -252,22 +260,28 @@ int main(int argc, char *argv[]) {
             pthread_mutex_unlock(&user_mutex);
         }
         else if (strncmp(command, "%get", 4) == 0) {
+            //printf("get request received\n");
             bzero(buffer, BUFFER_SIZE);
 
             char owner_name[50];
         
             for (int i = 0; i < resource_count; ++i) {
-                if (strcmp(resource_table[i].resource_name, arguments) == 0) {
+                if (strcmp(resource_table[i].resource_name, port) == 0) {
                     strcpy(owner_name, resource_table[i].owner_name);
                 }
             }
 
             for (int j = 0; j < user_count; ++j) {
                 if (strcmp(user_table[j].username, owner_name) == 0) {
+                    char port_user[10];
+                    sprintf(port_user, "%d", user_table[j].port);
                     strcpy(buffer, "%get ");
-                    strcat(buffer, arguments);
+                    strcat(buffer, port);
                     strcat(buffer, " ");
-                    strcat(buffer, user_table[j].ip_string);    
+                    strcat(buffer, user_table[j].ip_string);
+                    strcat(buffer, " ");
+                    strcat(buffer, port_user);
+                    printf("%s\n", buffer);
                 }
             }
 
