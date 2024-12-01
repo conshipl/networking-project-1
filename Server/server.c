@@ -64,9 +64,9 @@ void processDatagram(char* buffer, char* username, char* command, char* port, ch
 }
 
 void displayUserTable(struct User user_table[MAX_USERS], int user_count) {
-    printf("\nUser Name\t\tStatus\t\tTCP Port\n");
+    printf("\nUser Name\t\tStatus\t\tIP Address\tTCP Port\n");
     for (int i = 0; i < user_count; ++i) {
-        printf("%s\t\t%s\t%d\n", user_table[i].username, user_table[i].status, user_table[i].port); 
+        printf("%s\t\t%s\t%s\t%d\n", user_table[i].username, user_table[i].status, user_table[i].ip_string, user_table[i].port); 
     }
     printf("\n");
     fflush(stdout);
@@ -77,6 +77,7 @@ void displayResourceTable(struct Resource resource_table[MAX_RESOURCES], int res
     for (int j = 0; j < resource_count; ++j) {
         printf("%s\t\t%s\t\t%s\n", resource_table[j].resource_name, resource_table[j].owner_name, resource_table[j].status);
     }
+    printf("\n");
     fflush(stdout);
 }
 

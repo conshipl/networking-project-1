@@ -152,6 +152,7 @@ void *receiveDatagrams(void *socket_desc) {
 				}
 
 				fclose(file);
+				close(tcp_socket);
 			} 
             else {
 	        	printf("Available server resources: %s\n", buffer);
